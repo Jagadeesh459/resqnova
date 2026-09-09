@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { DashboardScreen } from './components/DashboardScreen';
 import { NavigationScreen } from './components/NavigationScreen';
 import { createClient } from '@/lib/supabase/client';
+import { LiveMissionBoard } from './LiveMissionBoard';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'navigation'>('dashboard');
@@ -44,7 +45,7 @@ export default function App() {
       <main className="flex-1 w-full">
         {liveMissionCount !== null && <div className="mx-auto mt-3 w-[calc(100%-2rem)] max-w-[1720px] rounded-xl border border-[#00D4FF]/25 bg-[#0a1b2d]/90 px-4 py-2 text-xs font-mono text-[#7ce2fe]">SUPABASE MISSION LINK <span className="ml-2 text-white">{liveMissionCount} active mission{liveMissionCount === 1 ? '' : 's'}</span></div>}
         {currentTab === 'dashboard' ? (
-          <DashboardScreen onOpenMission={handleOpenMission} />
+          <LiveMissionBoard onOpenMission={handleOpenMission} fallback={<DashboardScreen onOpenMission={handleOpenMission} />} />
         ) : (
           <NavigationScreen onBackToMissions={handleBackToMissions} />
         )}

@@ -31,6 +31,7 @@ The implemented product is a Vijayawada-focused emergency command center and Dig
 - Three separate role interfaces sourced from the supplied Citizen, Rescue, and Ambulance repositories.
 - Supabase Auth routing that sends each authenticated role to its own interface.
 - Authority-only overview panels for citizen SOS requests, rescue missions, and operational resources.
+- Server-side AI dispatch workflow ready for Gemini risk scoring and resource assignment.
 - Placeholder authority modules for resource and evacuation planning.
 - Database foundations for future forecasting, routing, and optimization.
 
@@ -75,12 +76,14 @@ The project is structured for later additions including:
 | Rescue portal | ✅ Integrated | External Rescue UI mounted at `/rescue`; assigned mission count syncs from Supabase |
 | Ambulance portal | ✅ Integrated | External Ambulance UI mounted at `/ambulance`; assigned vehicle status syncs to Supabase |
 | Authority portal separation | ✅ Implemented | Authority dashboard provides overview only; role UIs are not rendered inside the authority shell |
+| AI dispatch workflow | ✅ Implemented | `/api/ai/dispatch` evaluates requests, assigns resources, creates missions, and writes notifications |
+| Cross-portal request synchronization | ✅ Implemented | Citizen, Authority, Rescue, and Ambulance surfaces subscribe to shared Supabase records |
 | Hospital portal | 📌 Planned | Role exists in the database; dedicated page is not implemented |
 | Shelter portal | 🚧 Foundation only | Placeholder page |
 | Resource Planner logic | 📌 Planned | Placeholder authority page only |
 | Evacuation Planner logic | 📌 Planned | Placeholder authority page only |
 | FastAPI backend | 📌 Planned | Empty package folders only |
-| AI | 📌 Planned | No AI service or model implementation |
+| AI dispatch | ✅ Implemented | Server-side `/api/ai/dispatch` with Gemini integration and deterministic fallback |
 | Quantum optimization | 📌 Planned | UI panel and route graph foundation only; no QAOA engine |
 
 ## 3. Technology Stack
@@ -121,6 +124,7 @@ The project is structured for later additions including:
 - FastAPI/Python: 📌 planned; only empty backend package folders exist.
 - GraphHopper/OSRM navigation: 📌 planned for citizen, ambulance, and rescue portals. OSRM is currently used only to resolve road overlay geometry.
 - QAOA/Qiskit: 📌 planned; no quantum implementation exists.
+- Gemini: ✅ server-side dispatch route prepared; requires `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` in deployment secrets.
 
 ## 4. Folder Structure
 
@@ -198,7 +202,7 @@ flowchart LR
     Ambulance[Ambulance Portal Placeholder]
     Supabase[Supabase PostgreSQL + Realtime]
     Map[Leaflet + Thunderforest Atlas]
-    AI[AI Roadmap]
+    AI[Gemini AI Dispatch]
     Quantum[Quantum / QAOA Roadmap]
     Routing[OSRM road geometry; portal navigation planned]
 
@@ -211,7 +215,7 @@ flowchart LR
     Dashboard --> Supabase
     Map --> Supabase
     Map --> Routing
-    Supabase -. future data .-> AI
+    Supabase --> AI
     Supabase -. future optimization input .-> Quantum
 ```
 
@@ -439,6 +443,7 @@ The map is not currently a live traffic navigation system. Real navigation for c
 - Supabase road records store segment endpoints rather than authoritative full road shapes.
 - No authenticated map editing workflow exists.
 - No AI flood prediction or dynamic risk generation exists.
+- AI dispatch evaluates citizen requests, but long-horizon rainfall forecasting is not implemented.
 - Portal navigation is intentionally outside the Authority Dashboard and remains a future routing integration for the separate citizen, ambulance, and rescue workflows.
 - Static context GeoJSON is not a realtime hydrology feed.
 
@@ -753,9 +758,29 @@ The `/evacuation-planner` page is a placeholder with sections for high-risk vill
 
 The current command map no longer includes a navigation widget. Portal-specific navigation will be implemented later.
 
-## 16. AI Roadmap
+## 16. AI Dispatch
 
-Status: 📌 Planned.
+Status: ✅ Implemented foundation.
+
+Endpoint: `POST /api/ai/dispatch`
+
+The endpoint runs server-side and never exposes the Gemini key to the browser. It reads the citizen request and Vijayawada operational context from Supabase, evaluates risk, chooses nearby available resources, updates the request, creates a rescue mission, and writes notifications.
+
+Workflow:
+
+1. Citizen submits an SOS to `citizen_requests`.
+2. The frontend calls `/api/ai/dispatch` with the request UUID.
+3. Gemini evaluates risk, confidence, priority, rescue need, ambulance need, and explanation when `GEMINI_API_KEY` is configured.
+4. A deterministic safety fallback keeps the workflow usable before Gemini is configured.
+5. The endpoint assigns available rescue and ambulance resources through Supabase.
+6. The Authority map and queue, Citizen status banner, Rescue mission board, and Ambulance dispatch banner receive the update through Realtime.
+
+Required server-only variables:
+
+```env
+GEMINI_API_KEY=your-gemini-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+```
 
 Potential future features:
 
@@ -772,7 +797,7 @@ Proposed priority formula:
 Priority = Risk × People × FloodScore × Accessibility
 ```
 
-No AI model, inference endpoint, training pipeline, or Python AI service exists in the current repository.
+Long-horizon forecasting, rainfall ingestion, and model training remain future work.
 
 ## 17. Quantum Roadmap
 
@@ -958,10 +983,12 @@ The following is the recommended hackathon demonstration based on currently impl
 9. Toggle the compact risk layer and explain the Krishna Riverfront, Kanaka Durga, Bhavanipuram, and Krishna Lanka focus.
 10. Demonstrate fullscreen mode and locate control.
 11. Open Resource Planner and explain that deployment optimization is the next authority workflow.
-12. Open Evacuation Planner and explain that portal-specific route planning is planned.
-13. Show the Quantum Decision panel as the future optimization identity, clearly stating that the solver is not yet implemented.
-14. Close with the roadmap: authenticated portals, AI forecasting, route services, and QAOA optimization.
+12. Submit a Citizen SOS and show the request appearing in the Authority queue and map.
+13. Show the AI dispatch result and synchronized Rescue/Ambulance assignment surfaces.
+14. Open Evacuation Planner and explain that portal-specific route planning is planned.
+15. Show the Quantum Decision panel as the future optimization identity, clearly stating that the solver is not yet implemented.
+16. Close with the roadmap: forecasting, route services, and QAOA optimization.
 
 ## Final Handover Summary
 
-ResQNova currently provides a functioning Vijayawada emergency command-center foundation with a live Supabase-backed dashboard and Leaflet map. The strongest completed capability is the Digital Twin presentation and operational resource visualization. Authentication UX, citizen/responder workflows, AI prediction, and quantum optimization are intentionally not complete and should be built on the existing contracts rather than replacing the current dashboard architecture.
+ResQNova currently provides a functioning Vijayawada emergency command center with a live Supabase-backed dashboard, Leaflet map, separate role portals, synchronized citizen SOS workflow, and server-side AI dispatch foundation. Gemini forecasting depth, portal navigation, and quantum optimization remain future work on top of the completed contracts.

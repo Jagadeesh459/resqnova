@@ -16,7 +16,17 @@ export async function submitCitizenRequest(input: { emergencyType: string; peopl
     emergency_type: input.emergencyType,
   }).select("id,request_id,status").single();
   if (error) throw error;
-  return data;
+  try {
+    const dispatchResponse = await fetch("/api/ai/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId: data.id }),
+    });
+    const dispatch = await dispatchResponse.json() as { error?: string; [key: string]: unknown };
+    return { ...data, dispatch, dispatchError: dispatchResponse.ok ? undefined : dispatch.error };
+  } catch (dispatchError) {
+    return { ...data, dispatchError: dispatchError instanceof Error ? dispatchError.message : "AI dispatch is pending." };
+  }
 }
 
 export function subscribeToCitizenRequests(onChange: () => void) {

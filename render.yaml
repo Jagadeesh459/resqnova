@@ -2,6 +2,7 @@ services:
   - type: web
     name: resqnova
     runtime: node
+    plan: free
     rootDir: frontend
     buildCommand: npm ci && npm run build
     startCommand: npm run start
@@ -18,3 +19,7 @@ services:
         sync: false
       - key: NEXT_PUBLIC_OSRM_URL
         value: https://router.project-osrm.org
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

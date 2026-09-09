@@ -13,6 +13,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 
 The frontend clients read these values at runtime. Credentials are never stored in source files.
 
+The server-side AI dispatch route additionally requires `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY`. Keep both values server-only; do not prefix them with `NEXT_PUBLIC_`.
+
 ## Apply the schema
 
 From the repository root, authenticate and link the Supabase CLI to the project:

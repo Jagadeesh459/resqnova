@@ -3,6 +3,7 @@ import { RouterProvider, usePathname } from './lib/router';
 import { CitizenHeader } from './components/citizen/CitizenHeader';
 import { CitizenNavDrawer } from './components/citizen/CitizenNavDrawer';
 import { CitizenMobileNav } from './components/citizen/CitizenMobileNav';
+import { LiveRequestStatus } from './components/citizen/LiveRequestStatus';
 import { CitizenFooter } from './components/citizen/CitizenFooter';
 
 // Pages
@@ -40,6 +41,7 @@ function AppContent() {
 
       {/* Shared Sliding Navigation Drawer */}
       <CitizenNavDrawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      <LiveRequestStatus />
 
       {/* Main Routed Page Content */}
       <div className="flex-1 flex flex-col">{renderActivePage()}</div>

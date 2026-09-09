@@ -18,6 +18,7 @@ import AmbulanceAssignmentPage from './frontend/app/ambulance/assignment/page';
 import AmbulanceIncidentsPage from './frontend/app/ambulance/incidents/page';
 import { mockAmbulanceData, AmbulanceData } from './frontend/data/mockData';
 import { createClient } from '@/lib/supabase/client';
+import { LiveAssignmentBanner } from './LiveAssignmentBanner';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<'dashboard' | 'assignment' | 'incidents'>('dashboard');
@@ -171,6 +172,7 @@ export default function App() {
       </header>
 
       {/* Main Body with Cockpit Sidebar & Content */}
+      <LiveAssignmentBanner />
       <div className="flex-1 flex flex-col md:flex-row">
         {/* Cockpit Controls Sidebar */}
         <aside className="w-full md:w-60 lg:w-64 bg-[#040F1C]/70 border-r border-[#00B8E6]/20 p-4 flex flex-col justify-between shrink-0">

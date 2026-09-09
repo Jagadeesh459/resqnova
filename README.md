@@ -31,9 +31,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 NEXT_PUBLIC_THUNDERFOREST_API_KEY=YOUR_THUNDERFOREST_API_KEY
 NEXT_PUBLIC_OSRM_URL=https://router.project-osrm.org
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
 ```
 
-Never commit `.env.local` or service-role credentials.
+Never commit `.env.local`, `GEMINI_API_KEY`, or `SUPABASE_SERVICE_ROLE_KEY`. The Gemini and Supabase service-role keys are server-only secrets and must not use the `NEXT_PUBLIC_` prefix.
 
 ## Local Development
 
@@ -101,6 +103,8 @@ The repository includes [`render.yaml`](render.yaml) for a Node web service.
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `NEXT_PUBLIC_THUNDERFOREST_API_KEY`
+   - `GEMINI_API_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
 7. Deploy.
 
 Render uses:
@@ -133,6 +137,7 @@ After deployment, verify:
 - Thunderforest tiles load.
 - Supabase metrics and map layers load.
 - Citizen SOS requests appear in the authority map and request feed.
+- A configured Gemini key produces an AI dispatch decision and synchronized responder assignment.
 
 ## Backend Status
 
