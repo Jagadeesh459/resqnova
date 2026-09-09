@@ -13,10 +13,10 @@ import { AmbulanceLayer, CitizenRequestLayer, HospitalLayer, IncidentLayer, Resc
 import { fetchMapData, subscribeToMapChanges, VIJAYAWADA_BOUNDS, type MapData } from "@/lib/map/data";
 import { APMaskLayer } from "@/components/map/APMaskLayer";
 import { VillageLayer } from "@/components/map/NtrContextLayers";
-import { DeploymentZoneLayer, ResourceCoverageLayer, TacticalFloodRiskLayer } from "@/components/map/TacticalCoverageLayers";
-import { FloodGeoJsonLayer, ResourceClusterLayer, VijayawadaLabels } from "@/components/map/VijayawadaContextLayers";
+import { TacticalFloodRiskLayer } from "@/components/map/TacticalCoverageLayers";
+import { FloodGeoJsonLayer, VijayawadaLabels } from "@/components/map/VijayawadaContextLayers";
 
-const initialLayers: MapLayerState = { rescueTeams: true, ambulances: true, shelters: true, hospitals: true, citizenRequests: true, roads: false, villages: false, floodRisk: true, deploymentZones: false, floodZones: false, roadClosures: true, resourceClusters: false };
+const initialLayers: MapLayerState = { rescueTeams: true, ambulances: true, shelters: true, hospitals: true, citizenRequests: true, roads: false, villages: false, floodRisk: true, floodZones: false, roadClosures: true };
 const ANDHRA_PRADESH_BOUNDS: [[number, number], [number, number]] = [[12.6, 76.7], [19.3, 84.9]];
 
 function FitToVijayawada() {
@@ -94,18 +94,15 @@ export function APMap({ fullscreen, onFullscreenToggle }: APMapProps) {
         {layers.citizenRequests && <LayerGroup><CitizenRequestLayer requests={mapData.citizenRequests} /></LayerGroup>}
         {layers.roads && <LayerGroup><RoadLayer roads={mapData.roads} /></LayerGroup>}
         {layers.roadClosures && <LayerGroup><RoadLayer roads={mapData.roads.filter((road) => road.status !== "open")} /></LayerGroup>}
-        <ResourceCoverageLayer ambulances={layers.ambulances ? mapData.ambulances : []} hospitals={layers.hospitals ? mapData.hospitals : []} shelters={layers.shelters ? mapData.shelters : []} />
-        {layers.resourceClusters && <ResourceClusterLayer ambulances={mapData.ambulances} hospitals={mapData.hospitals} shelters={mapData.shelters} />}
       </>}
       {layers.villages && <VillageLayer />}
       {layers.floodRisk && <TacticalFloodRiskLayer zones={mapData?.riskZones ?? []} />}
       {layers.floodZones && <FloodGeoJsonLayer data={floodZones} />}
-      {layers.deploymentZones && <DeploymentZoneLayer zones={mapData?.deploymentZones ?? []} />}
       <ScaleControl position="bottomleft" imperial={false} metric />
       <ZoomControl position="bottomright" />
       <LocateButton />
     </MapContainer>
     {!thunderforestKey && <div className="pointer-events-none absolute inset-0 z-[450] grid place-items-center bg-[#07111f]/90 p-6 text-center backdrop-blur-[2px]"><div className="max-w-sm rounded-2xl border border-warning/30 bg-background/90 p-5 shadow-glass"><p className="font-heading text-sm font-semibold uppercase tracking-[0.18em] text-warning">Basemap unavailable</p><p className="mt-2 text-sm leading-6 text-text/65">Add <code className="font-mono text-primary">NEXT_PUBLIC_THUNDERFOREST_API_KEY</code> to enable the Atlas tactical map.</p></div></div>}
-    <div className="absolute right-4 top-20 z-[500] flex items-center gap-2"><LayerControls layers={layers} counts={{ ambulances: mapData?.ambulances.length ?? 0, rescueTeams: mapData?.rescueTeams.length ?? 0, hospitals: mapData?.hospitals.length ?? 0, shelters: mapData?.shelters.length ?? 0, citizenRequests: mapData?.citizenRequests.length ?? 0, roads: mapData?.roads.length ?? 0, roadClosures: mapData?.roads.filter((road) => road.status !== "open").length ?? 0, floodRisk: mapData?.riskZones.length ?? 0, floodZones: floodZones?.features.length ?? 0, deploymentZones: mapData?.deploymentZones.length ?? 0, resourceClusters: mapData ? mapData.ambulances.length + mapData.hospitals.length + mapData.shelters.length : 0 }} onToggle={toggleLayer} /><button type="button" aria-label={fullscreen ? "Exit fullscreen map" : "Open fullscreen map"} title={fullscreen ? "Exit fullscreen" : "Fullscreen map"} onClick={onFullscreenToggle} className="grid h-11 w-11 place-items-center rounded-full border border-primary/35 bg-background/85 text-primary shadow-neon backdrop-blur-xl transition hover:scale-105 hover:border-primary hover:bg-primary/15 hover:shadow-glow">{fullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}</button></div>
+    <div className="absolute right-4 top-20 z-[500] flex items-center gap-2"><LayerControls layers={layers} counts={{ ambulances: mapData?.ambulances.length ?? 0, rescueTeams: mapData?.rescueTeams.length ?? 0, hospitals: mapData?.hospitals.length ?? 0, shelters: mapData?.shelters.length ?? 0, citizenRequests: mapData?.citizenRequests.length ?? 0, roads: mapData?.roads.length ?? 0, roadClosures: mapData?.roads.filter((road) => road.status !== "open").length ?? 0, floodRisk: mapData?.riskZones.length ?? 0, floodZones: floodZones?.features.length ?? 0 }} onToggle={toggleLayer} /><button type="button" aria-label={fullscreen ? "Exit fullscreen map" : "Open fullscreen map"} title={fullscreen ? "Exit fullscreen" : "Fullscreen map"} onClick={onFullscreenToggle} className="grid h-11 w-11 place-items-center rounded-full border border-primary/35 bg-background/85 text-primary shadow-neon backdrop-blur-xl transition hover:scale-105 hover:border-primary hover:bg-primary/15 hover:shadow-glow">{fullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}</button></div>
   </div>;
 }

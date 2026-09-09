@@ -35,6 +35,7 @@ export function LiveMissionBoard({ onOpenMission }: { onOpenMission: (id: string
   const updateMission = async (mission: Mission, status: "en_route" | "on_scene" | "completed") => {
     const supabase = createClient();
     await supabase.from("rescue_missions").update({ mission_status: status, last_updated: new Date().toISOString() }).eq("id", mission.id);
+    await supabase.from("request_assignments").update({ status: status === "completed" ? "resolved" : status, updated_at: new Date().toISOString(), ...(status === "completed" ? { completed_at: new Date().toISOString() } : {}) }).eq("request_id", mission.request_id);
     await supabase.from("citizen_requests").update({ status: status === "en_route" ? "en_route" : status === "on_scene" ? "on_scene" : "resolved" }).eq("id", mission.request_id);
   };
 

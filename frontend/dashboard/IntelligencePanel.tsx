@@ -11,7 +11,7 @@ import { subscribeToMapChanges } from "@/lib/map/data";
 type RequestRow = {
   id: string; request_id: string; latitude: number; longitude: number;
   people_count: number; emergency_type: string; risk_level: string;
-  ai_confidence: number; priority_score: number; status: string;
+  ai_confidence: number; priority_score: number; ai_reason: string | null; ai_recommendation: string | null; dispatch_source: string | null; status: string;
   eta: string | null; created_at: string;
 };
 type MissionRow = {
@@ -34,7 +34,7 @@ export function IntelligencePanel() {
       try {
         const supabase = createClient();
         const [{ data: requestData, error: requestError }, { data: missionData, error: missionError }] = await Promise.all([
-          supabase.from("citizen_requests").select("id,request_id,latitude,longitude,people_count,emergency_type,risk_level,ai_confidence,priority_score,status,eta,created_at").order("created_at", { ascending: false }).limit(20),
+          supabase.from("citizen_requests").select("id,request_id,latitude,longitude,people_count,emergency_type,risk_level,ai_confidence,priority_score,ai_reason,ai_recommendation,dispatch_source,status,eta,created_at").not("status", "in", "(resolved,cancelled)").order("priority_score", { ascending: false }).order("created_at", { ascending: false }).limit(20),
           supabase.from("rescue_missions").select("id,request_id,mission_status,readiness,last_updated").order("last_updated", { ascending: false }).limit(8),
         ]);
         if (requestError) throw requestError;
@@ -66,6 +66,8 @@ export function IntelligencePanel() {
       {loading ? <LoadingRows /> : error ? <EmptyState message="Live request feed unavailable. Check Supabase connectivity." tone="warning" /> : requests.length === 0 ? <EmptyState message="No citizen SOS requests have been received." /> : <div className="space-y-2">{requests.slice(0, 3).map((request) => <div key={request.id} className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3"><span className={`h-2 w-2 shrink-0 rounded-full ${riskDot(request.risk_level)} shadow-[0_0_12px_currentColor]`} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-text">{request.emergency_type}</p><p className="mt-0.5 flex items-center gap-1 text-xs text-text/50"><MapPin className="h-3 w-3" />{request.request_id}</p></div><span className="text-[9px] uppercase tracking-[0.16em] text-primary">{request.status.replace("_", " ")}</span></div>)}</div>}
     </GlassCard>
 
+    <GlassCard className="p-4"><PanelHeading title="Gemini Recommendation" subtitle="AI dispatch decision from the active priority request"><Sparkles className="h-5 w-5 text-primary" /></PanelHeading>{requests[0] ? <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs"><div className="flex items-center justify-between gap-3"><p className="font-mono text-primary">{requests[0].request_id}</p><StatusBadge tone={riskTone(requests[0].risk_level)}>{requests[0].risk_level} / {Math.round(requests[0].ai_confidence)}%</StatusBadge></div><p className="mt-3 text-text/80">{requests[0].ai_reason ?? "AI assessment is processing."}</p><p className="mt-2 text-text/55">{requests[0].ai_recommendation ?? "No recommendation stored yet."}</p><p className="mt-2 font-mono text-[9px] uppercase tracking-[0.16em] text-primary/70">Source: {requests[0].dispatch_source?.replace("_", " ") ?? "pending"}</p></div> : <EmptyState message="Gemini recommendations appear when a citizen SOS is received." />}</GlassCard>
+
     <GlassCard className="p-4">
       <PanelHeading title="Citizen Request Feed" subtitle="Live Vijayawada operations"><Activity className="h-5 w-5 text-primary" /></PanelHeading>
       <div className="mb-3 flex gap-2">
@@ -85,7 +87,7 @@ export function IntelligencePanel() {
 }
 
 function RequestCard({ request }: { request: RequestRow }) {
-  return <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 transition hover:border-primary/25 hover:bg-primary/[0.04]"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-text">{request.request_id}</p><p className="mt-1 text-xs capitalize text-text/55">{request.emergency_type} / {request.people_count} people</p></div><StatusBadge tone={riskTone(request.risk_level)}>{request.risk_level}</StatusBadge></div><div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.08] pt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-text/45"><span><b className="block text-[9px] font-normal text-text/35">Priority</b>{request.priority_score}</span><span><b className="block text-[9px] font-normal text-text/35">Confidence</b>{Math.round(request.ai_confidence)}%</span><span><b className="block text-[9px] font-normal text-text/35">Status</b>{request.status.replace("_", " ")}</span></div></div>;
+  return <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 transition hover:border-primary/25 hover:bg-primary/[0.04]"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-text">{request.request_id}</p><p className="mt-1 text-xs capitalize text-text/55">{request.emergency_type} / {request.people_count} people</p></div><StatusBadge tone={riskTone(request.risk_level)}>{request.risk_level}</StatusBadge></div><div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.08] pt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-text/45"><span><b className="block text-[9px] font-normal text-text/35">Priority</b>{request.priority_score}</span><span><b className="block text-[9px] font-normal text-text/35">Confidence</b>{Math.round(request.ai_confidence)}%</span><span><b className="block text-[9px] font-normal text-text/35">Status</b>{request.status.replace("_", " ")}</span></div>{request.ai_recommendation && <p className="mt-2 text-[10px] text-primary/80">{request.ai_recommendation}</p>}</div>;
 }
 
 function PanelHeading({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) { return <div className="mb-4 flex items-center justify-between"><div><p className="font-heading text-base font-semibold">{title}</p><p className="mt-1 text-xs text-text/50">{subtitle}</p></div>{children}</div>; }

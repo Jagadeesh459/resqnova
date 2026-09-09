@@ -161,7 +161,7 @@ export async function fetchMapData(): Promise<MapData> {
 
   return {
     incidents: (result.incidents ?? []).filter(inVijayawada),
-    citizenRequests: (citizenRequests ?? []).filter(inVijayawada).map((request) => ({ ...request, citizen_name: Array.isArray(request.users) ? request.users[0]?.full_name : undefined })) as CitizenRequestRecord[],
+    citizenRequests: (citizenRequests ?? []).filter((request) => !["resolved", "cancelled"].includes(request.status)).filter(inVijayawada).sort((a, b) => Number(b.priority_score) - Number(a.priority_score)).map((request) => ({ ...request, citizen_name: Array.isArray(request.users) ? request.users[0]?.full_name : undefined })) as CitizenRequestRecord[],
     rescueTeams: (result.rescueTeams ?? []).filter(inVijayawada),
     ambulances: (result.ambulances ?? []).filter(inVijayawada),
     shelters: (result.shelters ?? []).filter(inVijayawada),
@@ -172,7 +172,7 @@ export async function fetchMapData(): Promise<MapData> {
   };
 }
 
-const liveTables = ["ambulances", "rescue_teams", "hospitals", "shelters", "roads", "flood_risk", "deployment_zones", "citizen_requests", "rescue_missions"] as const;
+const liveTables = ["ambulances", "rescue_teams", "hospitals", "shelters", "roads", "risk_zones", "deployment_zones", "citizen_requests", "rescue_missions", "request_assignments", "notifications"] as const;
 
 export function subscribeToMapChanges(onChange: () => void) {
   const supabase = createClient();

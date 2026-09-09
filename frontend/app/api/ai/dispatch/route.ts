@@ -82,11 +82,12 @@ export async function POST(request: Request) {
     if (!url || !serviceKey) return NextResponse.json({ error: "Dispatch service is not configured. Add SUPABASE_SERVICE_ROLE_KEY on the server." }, { status: 503 });
     const supabase = createSupabaseClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
-    const [{ data: requestRow, error: requestError }, { data: rescueTeams }, { data: ambulances }, { data: shelters }, { data: roads }, { data: zones }] = await Promise.all([
+    const [{ data: requestRow, error: requestError }, { data: rescueTeams }, { data: ambulances }, { data: shelters }, { data: hospitals }, { data: roads }, { data: zones }] = await Promise.all([
       supabase.from("citizen_requests").select("*").eq("id", body.requestId).single(),
       supabase.from("rescue_teams").select("id,manager_auth_id,latitude,longitude,status,team_name").in("status", ["available", "standby"]).is("assigned_request_id", null),
       supabase.from("ambulances").select("id,manager_auth_id,latitude,longitude,status,vehicle_code").eq("status", "available").is("assigned_request_id", null),
       supabase.from("shelters").select("id,shelter_name,available_capacity,latitude,longitude").gt("available_capacity", 0),
+      supabase.from("hospitals").select("id,hospital_name,available_beds,emergency_capacity,latitude,longitude").gt("available_beds", 0),
       supabase.from("roads").select("road_name,status,travel_time,risk_score,blocked_reason").eq("district", "NTR").limit(30),
       supabase.from("flood_risk").select("zone_name,risk_level,risk_score,polygon").eq("district", "NTR"),
     ]);
@@ -96,10 +97,11 @@ export async function POST(request: Request) {
     const nearestRescue = ((rescueTeams ?? []) as Resource[]).sort((a, b) => distanceKm(point, a) - distanceKm(point, b))[0];
     const nearestAmbulance = ((ambulances ?? []) as Resource[]).sort((a, b) => distanceKm(point, a) - distanceKm(point, b))[0];
     const nearestShelter = (shelters ?? []).filter((item) => item.available_capacity >= requestRow.people_count).sort((a, b) => distanceKm(point, a) - distanceKm(point, b))[0];
+    const nearestHospital = (hospitals ?? []).sort((a, b) => distanceKm(point, a) - distanceKm(point, b))[0];
     const baselineScore = calculateBaselineScore(requestRow, point, (zones ?? []) as Array<{ risk_level: string; risk_score: number; polygon?: { coordinates?: number[][][] } }>, (roads ?? []) as Array<{ status: string; risk_score?: number | null }>);
     let evaluated: { decision: AiDecision; source: string };
     try {
-      evaluated = await evaluateWithGemini({ location: point, people: requestRow.people_count, emergency: requestRow.emergency_type, baselineRiskScore: baselineScore, nearestRescueTeams: rescueTeams, nearestAmbulances: ambulances, nearestShelters: shelters, roadStatus: roads, riskZones: zones }, requestRow, baselineScore);
+      evaluated = await evaluateWithGemini({ location: point, people: requestRow.people_count, children: requestRow.children_count, elderly: requestRow.elderly_count, emergency: requestRow.emergency_type, baselineRiskScore: baselineScore, nearestRescueTeams: rescueTeams, nearestAmbulances: ambulances, nearestHospitals: hospitals, nearestShelters: shelters, roadStatus: roads, riskZones: zones }, requestRow, baselineScore);
     } catch {
       evaluated = { decision: normalizeDecision({}, requestRow, baselineScore), source: "heuristic_fallback" };
     }
@@ -107,14 +109,16 @@ export async function POST(request: Request) {
     const assignAmbulance = decision.dispatchAmbulance && Boolean(nearestAmbulance);
     const assignRescue = decision.dispatchRescue && Boolean(nearestRescue);
     const assignShelter = Boolean(nearestShelter) && (decision.riskScore >= 70 || requestRow.people_count >= 4);
+    const shelterName = assignShelter ? nearestShelter.shelter_name : decision.recommendedShelter;
     const nextStatus = assignRescue || assignAmbulance ? "assigned" : "pending";
 
     const { error: updateError } = await supabase.from("citizen_requests").update({
       risk_level: decision.priority === "Critical" ? "critical" : decision.priority === "High" ? "high" : decision.priority === "Moderate" ? "moderate" : "safe", ai_confidence: decision.confidence, priority_score: decision.riskScore,
-      ai_reason: decision.reason, ai_recommendation: decision.recommendedShelter ? `Use ${decision.recommendedShelter}` : decision.reason,
+      ai_reason: decision.reason, ai_recommendation: shelterName ? `Use ${shelterName}` : decision.reason,
       ai_processed_at: new Date().toISOString(), ambulance_required: decision.dispatchAmbulance,
       dispatch_source: evaluated.source, status: nextStatus, rescue_team_id: assignRescue ? nearestRescue.id : null,
       ambulance_id: assignAmbulance ? nearestAmbulance.id : null, shelter_id: assignShelter ? nearestShelter.id : null,
+      assigned_at: assignRescue || assignAmbulance ? new Date().toISOString() : null,
       eta: assignRescue ? new Date(Date.now() + Math.max(5, Math.round(distanceKm(point, nearestRescue) * 4)) * 60000).toISOString() : null,
     }).eq("id", requestRow.id);
     if (updateError) throw updateError;
@@ -130,12 +134,21 @@ export async function POST(request: Request) {
       if (ambulanceUpdateError) throw ambulanceUpdateError;
     }
 
+    if (assignRescue || assignAmbulance || assignShelter) {
+      const { error: assignmentError } = await supabase.from("request_assignments").upsert({ request_id: requestRow.id, rescue_team_id: assignRescue ? nearestRescue.id : null, ambulance_id: assignAmbulance ? nearestAmbulance.id : null, shelter_id: assignShelter ? nearestShelter.id : null, priority_score: decision.riskScore, status: "assigned", eta: assignRescue ? new Date(Date.now() + Math.max(5, Math.round(distanceKm(point, nearestRescue) * 4)) * 60000).toISOString() : null, updated_at: new Date().toISOString() }, { onConflict: "request_id" });
+      if (assignmentError) throw assignmentError;
+    }
+
     const notificationRows = [{ user_id: requestRow.citizen_id, citizen_id: requestRow.id, title: "AI triage complete", message: `${decision.priority} priority. ${assignRescue ? "A rescue team has been assigned." : "Your request is pending resource assignment."}`, type: "ai_update" }];
     const managerAuthIds = [assignRescue ? nearestRescue.manager_auth_id : null, assignAmbulance ? nearestAmbulance.manager_auth_id : null].filter(Boolean);
     if (managerAuthIds.length) {
       const { data: responderProfiles } = await supabase.from("users").select("id").in("auth_id", managerAuthIds);
       (responderProfiles ?? []).forEach((profile) => notificationRows.push({ user_id: profile.id, citizen_id: requestRow.id, title: "New dispatch assignment", message: `${decision.priority} priority request ${requestRow.request_id} requires response.`, type: "dispatch" }));
     }
+    const { data: operationalProfiles } = await supabase.from("users").select("id").in("role", ["rescue", "ambulance"]);
+    (operationalProfiles ?? []).forEach((profile) => {
+      if (!notificationRows.some((notification) => notification.user_id === profile.id)) notificationRows.push({ user_id: profile.id, citizen_id: requestRow.id, title: "New live SOS assignment", message: `${decision.priority} priority request ${requestRow.request_id} is active in Vijayawada.`, type: "dispatch" });
+    });
     await supabase.from("notifications").insert(notificationRows);
     return NextResponse.json({ requestId: requestRow.id, requestCode: requestRow.request_id, decision, dispatchSource: evaluated.source, assignedRescueTeam: nearestRescue?.team_name ?? null, assignedAmbulance: nearestAmbulance?.vehicle_code ?? null, status: nextStatus });
   } catch (error) {

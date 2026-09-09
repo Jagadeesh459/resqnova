@@ -136,18 +136,18 @@ body {
   font-weight: 700;
   box-shadow: none;
 }
-.resqnova-map-marker svg { width: 20px; height: 20px; filter: drop-shadow(0 0 5px currentColor); transition: transform 180ms ease, width 180ms ease, height 180ms ease; }
-.resqnova-map-marker:hover { transform: scale(1.235); z-index: 20; }
-.resqnova-map-marker:hover svg { width: 26px; height: 26px; }
-.resqnova-map-marker--incident { color: rgb(var(--color-danger)); animation: marker-pulse 1.8s ease-in-out infinite; }
-.resqnova-map-marker--rescue { color: rgb(var(--color-primary)); }
+.resqnova-map-marker svg { width: 24px; height: 24px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.85)); transition: transform 180ms ease, width 180ms ease, height 180ms ease; }
+.resqnova-map-marker:hover { transform: scale(1.12); z-index: 20; }
+.resqnova-map-marker:hover svg { width: 27px; height: 27px; }
+.resqnova-map-marker--incident { color: #f87171; }
+.resqnova-map-marker--rescue { color: #60a5fa; }
 .resqnova-map-marker--rescue.resqnova-map-marker--assigned { color: rgb(var(--color-warning)); }
 .resqnova-map-marker--rescue.resqnova-map-marker--busy { color: rgb(var(--color-danger)); }
-.resqnova-map-marker--ambulance { color: rgb(var(--color-primary)); animation: marker-pulse 2s ease-in-out infinite; }
-.resqnova-map-marker--ambulance.resqnova-map-marker--dispatched { color: rgb(var(--color-warning)); }
+.resqnova-map-marker--ambulance { color: #38bdf8; }
+.resqnova-map-marker--ambulance.resqnova-map-marker--dispatched { color: #fb923c; }
 .resqnova-map-marker--ambulance.resqnova-map-marker--maintenance { color: rgb(148 163 184); }
-.resqnova-map-marker--shelter { color: rgb(var(--color-success)); }
-.resqnova-map-marker--hospital { color: rgb(96 165 250); }
+.resqnova-map-marker--shelter { color: #4ade80; }
+.resqnova-map-marker--hospital { color: #93c5fd; }
 .resqnova-map-marker--rescue { border-radius: 35% 35% 50% 50%; }
 .resqnova-map-marker--shelter { border-radius: 9px; }
 .resqnova-glass-popup .leaflet-popup-content-wrapper { border: 1px solid rgba(0, 212, 255, 0.38); border-radius: 16px; background: rgba(7, 17, 31, 0.94); box-shadow: 0 0 28px rgba(0, 212, 255, 0.18), 0 18px 50px rgba(0, 0, 0, 0.5); backdrop-filter: blur(18px); animation: popup-in 180ms ease-out; }

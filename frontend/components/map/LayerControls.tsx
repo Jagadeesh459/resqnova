@@ -4,13 +4,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Layers3, X } from "lucide-react";
 import { useState } from "react";
 
-export type MapLayerKey = "rescueTeams" | "ambulances" | "shelters" | "hospitals" | "citizenRequests" | "roads" | "villages" | "floodRisk" | "deploymentZones" | "floodZones" | "roadClosures" | "resourceClusters";
+export type MapLayerKey = "rescueTeams" | "ambulances" | "shelters" | "hospitals" | "citizenRequests" | "roads" | "villages" | "floodRisk" | "floodZones" | "roadClosures";
 export type MapLayerState = Record<MapLayerKey, boolean>;
 type LayerControlsProps = { layers: MapLayerState; onToggle: (key: MapLayerKey) => void; counts: Partial<Record<MapLayerKey, number>> };
 
 const groups = [
   { title: "Resources", items: [["ambulances", "Ambulances", "bg-primary"], ["rescueTeams", "Rescue Teams", "bg-accent"], ["hospitals", "Hospitals", "bg-blue-400"], ["shelters", "Shelters", "bg-success"], ["citizenRequests", "Citizen SOS", "bg-danger"]] },
-  { title: "Risk / Operations", items: [["roads", "Roads", "bg-warning"], ["roadClosures", "Road Closures", "bg-danger"], ["floodRisk", "High Risk Zones", "bg-danger"], ["floodZones", "Flood Zones", "bg-warning"], ["deploymentZones", "Deployment Zones", "bg-blue-400"], ["resourceClusters", "Resource Clusters", "bg-primary"], ["villages", "Villages", "bg-orange-300"]] },
+  { title: "Risk / Operations", items: [["roads", "Roads", "bg-warning"], ["roadClosures", "Road Closures", "bg-danger"], ["floodRisk", "High Risk Zones", "bg-danger"], ["floodZones", "Flood Zones", "bg-warning"], ["villages", "Villages", "bg-orange-300"]] },
 ] as const;
 
 export function LayerControls({ layers, onToggle, counts }: LayerControlsProps) {

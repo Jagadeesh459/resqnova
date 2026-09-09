@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldAlert, Radio, Activity, LogOut } from 'lucide-react';
-import { RESCUE_LEAD } from '../data/mockData';
 import { createClient } from '@/lib/supabase/client';
 
 interface HeaderProps {
@@ -9,6 +8,19 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ currentTab, onSelectTab }) => {
+  const [profile, setProfile] = useState({ name: 'Rescue operator', role: 'rescue' });
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from('users').select('full_name,role').eq('auth_id', user.id).maybeSingle();
+      if (active && data) setProfile({ name: data.full_name, role: data.role });
+    };
+    void load();
+    return () => { active = false; };
+  }, []);
   const handleSignOut = async () => {
     await createClient().auth.signOut();
     window.location.href = '/login';
@@ -77,19 +89,14 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onSelectTab }) => {
           <div className="flex items-center gap-2.5 pl-2 border-l border-[#152e4d]/70">
             <div className="text-right hidden sm:block">
               <div className="text-xs font-semibold text-[#E6F4FA]">
-                {RESCUE_LEAD.name}
+                {profile.name}
               </div>
               <div className="text-[9px] font-mono tracking-wider text-[#7A9BB8]">
-                {RESCUE_LEAD.role}
+                {profile.role}
               </div>
             </div>
           <div className="relative">
-              <img
-                src={RESCUE_LEAD.avatarUrl}
-                alt={RESCUE_LEAD.name}
-                referrerPolicy="no-referrer"
-                className="w-8 h-8 rounded-full object-cover border border-[#00D4FF]/40 ring-2 ring-[#0B1F36]"
-              />
+              <div className="grid h-8 w-8 place-items-center rounded-full border border-[#00D4FF]/40 bg-[#0B1F36] text-xs font-bold text-[#00D4FF]">{profile.name.slice(0, 1).toUpperCase()}</div>
               <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#00D4FF] border-2 border-[#081321]"></span>
             </div>
           </div>

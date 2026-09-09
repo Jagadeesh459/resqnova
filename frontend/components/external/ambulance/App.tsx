@@ -13,18 +13,16 @@ import {
   Ambulance,
   LogOut,
 } from 'lucide-react';
-import AmbulanceDashboardPage from './frontend/app/ambulance/page';
-import AmbulanceAssignmentPage from './frontend/app/ambulance/assignment/page';
-import AmbulanceIncidentsPage from './frontend/app/ambulance/incidents/page';
-import { mockAmbulanceData, AmbulanceData } from './frontend/data/mockData';
 import { createClient } from '@/lib/supabase/client';
 import { LiveAssignmentBanner } from './LiveAssignmentBanner';
 import { LiveAmbulanceOverview } from './LiveAmbulanceOverview';
 
+type LiveHeaderData = { vehicleCode: string; status: string; gpsLock: string };
+
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<'dashboard' | 'assignment' | 'incidents'>('dashboard');
   const [logoIconStyle, setLogoIconStyle] = useState<'shield' | 'plus'>('shield');
-  const [data, setData] = useState<AmbulanceData>(mockAmbulanceData);
+  const [data, setData] = useState<LiveHeaderData>({ vehicleCode: 'Awaiting live unit', status: 'SYNCING', gpsLock: 'PENDING' });
   const [liveAmbulanceId, setLiveAmbulanceId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,19 +31,14 @@ export default function App() {
     const load = async () => {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) return;
-      const { data: row } = await supabase.from('ambulances').select('id,vehicle_code,status,deployment_zone,crew_size,fuel,updated_at').or(`manager_auth_id.eq.${authData.user.id},manager_auth_id.is.null`).order('assigned_request_id', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      const { data: row } = await supabase.from('ambulances').select('id,vehicle_code,status,deployment_zone,crew_size,fuel,latitude,longitude,updated_at').or(`manager_auth_id.eq.${authData.user.id},manager_auth_id.is.null`).order('assigned_request_id', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }).limit(1).maybeSingle();
       if (!active || !row) return;
       setLiveAmbulanceId(row.id);
-      setData((previous) => ({
-        ...previous,
+      setData({
         vehicleCode: row.vehicle_code,
-        assignedZone: row.deployment_zone ?? previous.assignedZone,
-        stationBase: row.deployment_zone ?? previous.stationBase,
-        activeCrew: `${row.crew_size ?? 0} CREW MEMBERS`,
-        status: row.status === 'available' ? 'AVAILABLE' : row.status === 'dispatched' ? 'EN_ROUTE' : row.status === 'standby' ? 'STANDBY' : previous.status,
-        statusLabel: row.status.toUpperCase(),
-        statusDetail: `Fuel ${row.fuel ?? 0}% / last update ${row.updated_at ?? 'pending'}`,
-      }));
+        status: row.status === 'available' ? 'AVAILABLE' : row.status === 'dispatched' ? 'EN_ROUTE' : row.status === 'standby' ? 'STANDBY' : row.status.toUpperCase(),
+        gpsLock: `${row.latitude.toFixed(4)}, ${row.longitude.toFixed(4)}`,
+      });
     };
     void load();
     const channel = supabase.channel('ambulance-portal').on('postgres_changes', { event: '*', schema: 'public', table: 'ambulances' }, () => { void load(); });
@@ -84,11 +77,7 @@ export default function App() {
   };
 
   const handleStatusChange = (newStatus: 'AVAILABLE' | 'EN_ROUTE' | 'ARRIVED' | 'STANDBY') => {
-    setData((prev) => ({
-      ...prev,
-      status: newStatus,
-      statusLabel: newStatus === 'AVAILABLE' ? 'UNIT READY' : newStatus,
-    }));
+    setData((prev) => ({ ...prev, status: newStatus }));
     if (liveAmbulanceId) {
       const databaseStatus = newStatus === 'AVAILABLE' ? 'available' : newStatus === 'EN_ROUTE' ? 'dispatched' : newStatus === 'STANDBY' ? 'standby' : 'available';
       void createClient().from('ambulances').update({ status: databaseStatus, updated_at: new Date().toISOString() }).eq('id', liveAmbulanceId);
