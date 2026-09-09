@@ -1,0 +1,4 @@
+project_id = "resqnova"
+
+[db.seed]
+sql_paths = ["./seed.sql"]

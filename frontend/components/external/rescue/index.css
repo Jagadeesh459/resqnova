@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #081321;
+    color: #e6f4fa;
+    overflow-x: hidden;
+  }
+
+  /* Tactical custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #081321;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #162a42;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #00d4ff55;
+  }
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Glassmorphism tactical surfaces */
+.tactical-panel {
+  background: rgba(11, 31, 54, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 184, 230, 0.18);
+}
+
+.tactical-panel-elevated {
+  background: rgba(15, 41, 74, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 212, 255, 0.32);
+}
+
+.tactical-glow-cyan {
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.28);
+}
+
+.tactical-glow-red {
+  box-shadow: 0 0 18px rgba(255, 77, 77, 0.28);
+}
+
+.tactical-glow-amber {
+  box-shadow: 0 0 16px rgba(255, 212, 59, 0.25);
+}
+

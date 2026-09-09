@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
+    background-color: #081321;
+    color: #d8e3f7;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ResQNova Cyber Glass & Glow effects */
+.glass-panel {
+  background: rgba(11, 31, 54, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 184, 230, 0.22);
+}
+
+.glass-panel-active {
+  background: rgba(15, 42, 74, 0.9);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 212, 255, 0.45);
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.12);
+}
+
+.cyan-glow {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.35);
+}
+
+.cyan-glow-sm {
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.25);
+}
+
+.red-glow {
+  box-shadow: 0 0 20px rgba(255, 77, 77, 0.35);
+}
+
+@keyframes radarPing {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.animate-radar {
+  animation: radarPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes corridorPulse {
+  0%, 100% {
+    stroke-opacity: 0.9;
+    filter: drop-shadow(0 0 8px #00d4ff);
+  }
+  50% {
+    stroke-opacity: 0.5;
+    filter: drop-shadow(0 0 14px #00d4ff);
+  }
+}
+
+.animate-corridor {
+  animation: corridorPulse 2.5s ease-in-out infinite;
+}

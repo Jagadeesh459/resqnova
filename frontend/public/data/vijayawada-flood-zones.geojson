@@ -1,0 +1,9 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"name":"Krishna River Floodplain","risk":"extreme"},"geometry":{"type":"Polygon","coordinates":[[[80.600,16.535],[80.640,16.535],[80.650,16.495],[80.610,16.480],[80.590,16.510],[80.600,16.535]]]}},
+    {"type":"Feature","properties":{"name":"Kanaka Durga Lowlands","risk":"high"},"geometry":{"type":"Polygon","coordinates":[[[80.635,16.520],[80.670,16.520],[80.670,16.495],[80.635,16.495],[80.635,16.520]]]}},
+    {"type":"Feature","properties":{"name":"Bhavanipuram Flood Belt","risk":"medium"},"geometry":{"type":"Polygon","coordinates":[[[80.590,16.555],[80.625,16.555],[80.625,16.520],[80.590,16.520],[80.590,16.555]]]}},
+    {"type":"Feature","properties":{"name":"Gollapudi Drainage Zone","risk":"moderate"},"geometry":{"type":"Polygon","coordinates":[[[80.600,16.575],[80.620,16.575],[80.620,16.555],[80.600,16.555],[80.600,16.575]]]}}
+  ]
+}
