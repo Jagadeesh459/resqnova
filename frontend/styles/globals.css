@@ -94,6 +94,7 @@ body {
 }
 
 .leaflet-container {
+  isolation: isolate;
   color: rgb(var(--color-text));
   font-family: var(--font-inter), sans-serif;
 }
