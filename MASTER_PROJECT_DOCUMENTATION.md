@@ -889,6 +889,10 @@ Local `supabase start` and `supabase db reset` require Docker Desktop or Podman.
 3. Run the production build and start commands configured by the host.
 4. Ensure the Thunderforest key is valid for the deployed origin.
 
+### Render
+
+The repository root includes `render.yaml` for Render Blueprint deployment. It configures a Node web service with `frontend` as the root directory, `npm ci && npm run build` as the build command, `npm run start` as the start command, and `/login` as the health check. Set the Supabase and Thunderforest public environment variables in Render before deployment.
+
 ### Supabase
 
 1. Link the project with the Supabase CLI.

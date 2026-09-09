@@ -35,7 +35,7 @@ Run the seed after the migration from the repository root:
 psql "$SUPABASE_DB_URL" -f supabase/seed.sql
 ```
 
-Alternatively, paste `seed.sql` into the Supabase SQL Editor after the migration has been applied. The seed contains demo records for Andhra Pradesh districts and intentionally leaves `auth_id` values null until real Supabase Auth users are created.
+Alternatively, paste `seed.sql` into the Supabase SQL Editor after the migration has been applied. The seed contains Vijayawada-focused demo records and intentionally leaves `auth_id` values null until real Supabase Auth users are created.
 
 ## Local development
 
