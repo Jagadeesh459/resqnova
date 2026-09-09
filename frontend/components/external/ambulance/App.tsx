@@ -19,6 +19,7 @@ import AmbulanceIncidentsPage from './frontend/app/ambulance/incidents/page';
 import { mockAmbulanceData, AmbulanceData } from './frontend/data/mockData';
 import { createClient } from '@/lib/supabase/client';
 import { LiveAssignmentBanner } from './LiveAssignmentBanner';
+import { LiveAmbulanceOverview } from './LiveAmbulanceOverview';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<'dashboard' | 'assignment' | 'incidents'>('dashboard');
@@ -32,7 +33,7 @@ export default function App() {
     const load = async () => {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) return;
-      const { data: row } = await supabase.from('ambulances').select('id,vehicle_code,status,deployment_zone,crew_size,fuel,updated_at').eq('manager_auth_id', authData.user.id).maybeSingle();
+      const { data: row } = await supabase.from('ambulances').select('id,vehicle_code,status,deployment_zone,crew_size,fuel,updated_at').or(`manager_auth_id.eq.${authData.user.id},manager_auth_id.is.null`).order('assigned_request_id', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }).limit(1).maybeSingle();
       if (!active || !row) return;
       setLiveAmbulanceId(row.id);
       setData((previous) => ({
@@ -244,26 +245,7 @@ export default function App() {
 
         {/* Dynamic Screen View */}
         <main className="flex-1 flex flex-col bg-[#081321] overflow-y-auto">
-          {currentRoute === 'dashboard' ? (
-            <AmbulanceDashboardPage
-              data={data}
-              onNavigateToAssignment={() => navigateTo('assignment')}
-              onNavigateToIncidents={() => navigateTo('incidents')}
-              onStatusChange={handleStatusChange}
-            />
-          ) : currentRoute === 'assignment' ? (
-            <AmbulanceAssignmentPage
-              data={data}
-              onNavigateToDashboard={() => navigateTo('dashboard')}
-              onStatusChange={handleStatusChange}
-            />
-          ) : (
-            <AmbulanceIncidentsPage
-              data={data}
-              onNavigateToDashboard={() => navigateTo('dashboard')}
-              onNavigateToAssignment={() => navigateTo('assignment')}
-            />
-          )}
+          <LiveAmbulanceOverview />
         </main>
       </div>
     </div>

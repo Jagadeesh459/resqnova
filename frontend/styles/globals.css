@@ -127,14 +127,14 @@ body {
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 2px solid currentColor;
-  border-radius: 9999px;
-  background: rgba(7, 17, 31, 0.86);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: rgb(var(--color-primary));
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 10px;
   font-weight: 700;
-  box-shadow: 0 0 16px currentColor;
+  box-shadow: none;
 }
 .resqnova-map-marker svg { width: 20px; height: 20px; filter: drop-shadow(0 0 5px currentColor); transition: transform 180ms ease, width 180ms ease, height 180ms ease; }
 .resqnova-map-marker:hover { transform: scale(1.235); z-index: 20; }

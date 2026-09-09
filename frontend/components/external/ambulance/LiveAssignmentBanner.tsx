@@ -14,7 +14,7 @@ export function LiveAssignmentBanner() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from('ambulances').select('vehicle_code,status,deployment_zone,assigned_request_id,citizen_requests:assigned_request_id(request_id,emergency_type,people_count,risk_level,latitude,longitude)').eq('manager_auth_id', user.id).maybeSingle();
+      const { data } = await supabase.from('ambulances').select('vehicle_code,status,deployment_zone,assigned_request_id,citizen_requests:assigned_request_id(request_id,emergency_type,people_count,risk_level,latitude,longitude)').or(`manager_auth_id.eq.${user.id},manager_auth_id.is.null`).order('assigned_request_id', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }).limit(1).maybeSingle();
       if (active) setAssignment(data as unknown as Assignment | null);
     };
     void load();
