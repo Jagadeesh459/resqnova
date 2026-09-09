@@ -150,11 +150,12 @@ function inVijayawada(record: { latitude: number; longitude: number }) {
 
 export async function fetchMapData(): Promise<MapData> {
   const supabase = createClient();
-  const [{ data, error }, { data: riskZones }, { data: deploymentZones }, { data: citizenRequests }] = await Promise.all([
+  const [{ data, error }, { data: riskZones }, { data: deploymentZones }, { data: citizenRequests }, { data: directRescueTeams }] = await Promise.all([
     supabase.rpc("get_public_map_data"),
     supabase.from("flood_risk").select("id,zone_name,risk_level,risk_score,polygon").eq("district", "NTR"),
     supabase.from("deployment_zones").select("id,zone_name,ready_units,capacity,coverage,polygon").eq("district", "NTR"),
     supabase.from("citizen_requests").select("id,request_id,citizen_id,latitude,longitude,people_count,emergency_type,risk_level,ai_confidence,priority_score,status,rescue_team_id,ambulance_id,eta,created_at,users:citizen_id(full_name)").order("created_at", { ascending: false }),
+    supabase.from("rescue_teams").select("id,team_name,leader,latitude,longitude,status,assigned_incident,heading,updated_at,personnel,equipment,readiness,team_type").gte("latitude", VIJAYAWADA_BOUNDS.south).lte("latitude", VIJAYAWADA_BOUNDS.north).gte("longitude", VIJAYAWADA_BOUNDS.west).lte("longitude", VIJAYAWADA_BOUNDS.east).order("updated_at", { ascending: false }),
   ]);
   if (error) throw error;
   const result = data as Partial<MapData>;
@@ -162,7 +163,7 @@ export async function fetchMapData(): Promise<MapData> {
   return {
     incidents: (result.incidents ?? []).filter(inVijayawada),
     citizenRequests: (citizenRequests ?? []).filter((request) => !["resolved", "cancelled"].includes(request.status)).filter(inVijayawada).sort((a, b) => Number(b.priority_score) - Number(a.priority_score)).map((request) => ({ ...request, citizen_name: Array.isArray(request.users) ? request.users[0]?.full_name : undefined })) as CitizenRequestRecord[],
-    rescueTeams: (result.rescueTeams ?? []).filter(inVijayawada),
+    rescueTeams: ((result.rescueTeams?.length ? result.rescueTeams : directRescueTeams ?? []) as RescueTeamRecord[]).filter(inVijayawada),
     ambulances: (result.ambulances ?? []).filter(inVijayawada),
     shelters: (result.shelters ?? []).filter(inVijayawada),
     hospitals: (result.hospitals ?? []).filter(inVijayawada),

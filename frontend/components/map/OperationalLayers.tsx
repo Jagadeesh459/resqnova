@@ -38,7 +38,7 @@ export function CitizenRequestLayer({ requests }: { requests: CitizenRequestReco
 
 export function RescueTeamLayer({ teams }: { teams: RescueTeamRecord[] }) {
   const markerIcon = useMemo(() => icon("rescue"), []);
-  return <LayerGroup>{teams.map((team) => <Marker key={team.id} position={[team.latitude, team.longitude]} icon={markerIcon}><Popup className={popup}><div className="space-y-1"><strong>{team.team_name}</strong><StatusRow label="Team type" value={team.team_type} /><StatusRow label="Personnel" value={team.personnel} /><StatusRow label="Readiness" value={team.readiness ?? formatStatus(team.status)} /><StatusRow label="Equipment" value={team.equipment?.join(", ")} /></div></Popup></Marker>)}</LayerGroup>;
+  return <LayerGroup>{teams.map((team) => <Marker key={team.id} position={[team.latitude, team.longitude]} icon={markerIcon} zIndexOffset={700} riseOnHover><Popup className={popup}><div className="space-y-1"><strong>{team.team_name}</strong><StatusRow label="Location" value={`${team.latitude.toFixed(4)}, ${team.longitude.toFixed(4)}`} /><StatusRow label="Team type" value={team.team_type} /><StatusRow label="Personnel" value={team.personnel} /><StatusRow label="Readiness" value={team.readiness ?? formatStatus(team.status)} /><StatusRow label="Equipment" value={team.equipment?.join(", ")} /></div></Popup></Marker>)}</LayerGroup>;
 }
 
 export function AmbulanceLayer({ ambulances }: { ambulances: AmbulanceRecord[] }) {

@@ -142,6 +142,7 @@ body {
 .resqnova-map-marker:hover svg { width: 27px; height: 27px; }
 .resqnova-map-marker--incident { color: #f87171; }
 .resqnova-map-marker--rescue { color: #60a5fa; }
+.resqnova-map-marker--rescue { padding: 4px; border-radius: 35% 35% 50% 50%; background: rgba(30, 64, 175, 0.82); }
 .resqnova-map-marker--rescue.resqnova-map-marker--assigned { color: rgb(var(--color-warning)); }
 .resqnova-map-marker--rescue.resqnova-map-marker--busy { color: rgb(var(--color-danger)); }
 .resqnova-map-marker--ambulance { color: #38bdf8; }
