@@ -11,7 +11,8 @@ import { MetricCard } from "@/components/MetricCard";
 import { CommandCenterMap } from "@/dashboard/CommandCenterMap";
 import { IntelligencePanel } from "@/dashboard/IntelligencePanel";
 import { QuantumDecisionPanel } from "@/dashboard/QuantumDecisionPanel";
-import { fetchDashboardMetrics, subscribeToDashboardMetrics, type DashboardMetrics } from "@/lib/dashboard/metrics";
+import { dispatchPendingCitizenRequests, fetchDashboardMetrics, subscribeToDashboardMetrics, type DashboardMetrics } from "@/lib/dashboard/metrics";
+import { LiveSosQueue } from "@/dashboard/LiveSosQueue";
 
 const metricDefinitions = [
   { key: "high_risk_zones", label: "High-Risk Zones", helper: "Forecast zones requiring planning", icon: ShieldAlert, accentClassName: "text-danger shadow-[0_0_22px_rgba(239,68,68,0.24)]" },
@@ -66,8 +67,11 @@ export function DashboardView() {
         if (active) setMetricsStatus("error");
       });
 
-    loadMetrics();
-    const unsubscribe = subscribeToDashboardMetrics(() => { void loadMetrics(); });
+    const syncAndLoad = () => {
+      void dispatchPendingCitizenRequests().catch(() => undefined).finally(() => { void loadMetrics(); });
+    };
+    syncAndLoad();
+    const unsubscribe = subscribeToDashboardMetrics(syncAndLoad);
 
     return () => {
       active = false;
@@ -84,6 +88,7 @@ export function DashboardView() {
         {metricsStatus === "empty" && <AlertBanner title="No operational records yet" message="Supabase is connected, but the operational tables do not contain records yet." tone="info" />}
         {metricsStatus === "ready" && <GlassCard className="p-4"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.24em] text-primary">Preparedness Overview</p><p className="mt-1 text-sm text-text/60">Vijayawada operational posture</p></div><div className="grid w-full gap-3 sm:w-auto sm:grid-cols-3">{[{ label: "Forecast Status", value: preparedness.forecast }, { label: "Resource Readiness", value: preparedness.resources }, { label: "Evacuation Readiness", value: preparedness.evacuation }].map((item) => <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><p className="text-[10px] uppercase tracking-[0.18em] text-text/45">{item.label}</p><p className="mt-1 font-mono text-sm text-success">{item.value}</p></div>)}</div></div></GlassCard>}
         <div className={`grid items-start gap-4 ${mapFullscreen ? "xl:grid-cols-1" : "xl:grid-cols-[minmax(0,1.7fr)_minmax(17rem,0.55fr)]"}`}><CommandCenterMap fullscreen={mapFullscreen} onFullscreenChange={setMapFullscreen} />{!mapFullscreen && <IntelligencePanel />}</div>
+        {!mapFullscreen && <LiveSosQueue />}
         <QuantumDecisionPanel />
       </div>
     </AppShell>
