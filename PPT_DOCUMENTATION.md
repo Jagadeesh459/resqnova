@@ -226,3 +226,4 @@ ResQNova implements genuine **Qiskit 2.5** in Python:
 
 - **Q: "How does the AI predict floods if rainfall sensors fail?"**  
   *Answer:* "Our hydraulic predictive model uses upstream dam discharge ($Q_{\text{discharge}}$ from Prakasam Barrage) as a primary forcing function combined with Digital Elevation Models (DEM). Even if local weather sensors fail, upstream reservoir discharge and terrain contour gradients allow the system to accurately predict downstream inundation."
+
