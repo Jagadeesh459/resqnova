@@ -1,4 +1,4 @@
-# 📊 ResQNova: Complete PPT & Technical Defense Documentation
+# 🌊 ResQNova: Comprehensive Technical Documentation & Presentation Guide
 ### Autonomous Disaster Management Platform with Hybrid Classical-Quantum Optimization & Multi-Modal AI Triage
 **Case Study:** August–September 2024 Vijayawada Flood Disaster (Prakasam Barrage, Krishna River, NTR District, Andhra Pradesh)
 
@@ -137,6 +137,8 @@ The table below explains the exact role of every major file across the backend, 
 ---
 
 # 5. End-to-End Flow of Execution (19-Step Operational Lifecycle)
+
+The diagram and trace below demonstrate how a single distress call flows through the entire system:
 
 ```
 [Citizen SOS] ──> [Gemini Triage] ──> [Urgency 94/100] ──> [Inundation Model] ──> [Road Closure]
