@@ -123,13 +123,16 @@
 
 ## 11. Future Optimization Foundation
 
+- FastAPI Quantum Engine bridge.
+- Supabase-to-quantum live scenario adapter.
+- Preserved upstream QAOA, QUBO, COBYLA, and statevector modules.
+- Quantum endpoints for pre-positioning, rescue, ambulance, evacuation, and re-optimization.
 - Route graph types.
 - Road travel-time data.
 - Road risk data.
 - Safe-route rendering preparation.
 - Resource deployment preparation.
 - Future GraphHopper or OSRM integration point.
-- Future quantum optimization integration point.
 
 ## 12. Database Migration Groups
 
@@ -186,4 +189,5 @@
 - AI execution migrations `20260910000017` and `20260910000018` are applied remotely.
 - The project is pushed to the GitHub `main` branch.
 - Gemini requires `GEMINI_API_KEY` on the server; a deterministic fallback remains available when it is absent.
-- Further work remains for production validation, richer route-network ETA calculation, and final quantum optimization quality.
+- Quantum Engine bridge is available under `backend/` and requires `QUANTUM_ENGINE_URL` in the Next.js server environment.
+- Further work remains for production validation, richer route-network ETA calculation, Supabase write-back of quantum plans, and final quantum optimization quality.
