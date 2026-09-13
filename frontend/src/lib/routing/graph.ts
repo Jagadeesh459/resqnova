@@ -1,96 +1,91 @@
 import { Graph, GraphNode, GraphEdge, GraphBuildStats } from './types';
 import { geoJsonToLeafletCoordinates, haversineDistance } from './utils';
 import { supabase } from '../supabase';
-import bundledNetwork from './vijayawada_road_network.json';
 
 /**
- * Builds the high-resolution Vijayawada Graph Engine from OpenStreetMap & Supabase.
- * - Queries Supabase PostgreSQL tables ('intersections' and 'roads')
- * - Falls back seamlessly to bundled full OSM Vijayawada network dataset if cloud tables are cold
- * - Filters out blocked/flooded road edges
- * - Preserves full GeoJSON road curvature geometry converted to Leaflet [lat, lng]
+ * Builds the Vijayawada Topological Graph Engine directly from Supabase PostgreSQL tables.
+ * Supabase is the single source of truth:
+ * - Queries 'intersections' (vertices V)
+ * - Queries 'roads' (directed topological edges E)
+ * - Excludes blocked or flooded road segments
+ * - Preserves full GeoJSON curvature geometry converted to Leaflet [lat, lng]
+ * - If Supabase fails or tables are unpopulated, throws an explicit error (no silent JSON fallback).
  */
 export async function buildGraph(
-  customRoadOverrides?: any[],
-  customIntersectionOverrides?: GraphNode[]
-): Promise<{ graph: Graph; stats: GraphBuildStats; source: 'supabase' | 'osm_dataset' }> {
+  customRoadOverrides?: any[]
+): Promise<{ graph: Graph; stats: GraphBuildStats }> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured. Please check your NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+  }
+
   const nodes = new Map<string, GraphNode>();
   const adjacency = new Map<string, GraphEdge[]>();
 
-  let totalRoads = 0;
   let totalBlockedRoadsSkipped = 0;
   let totalGraphEdges = 0;
   let totalGeometryPoints = 0;
-  let dataSource: 'supabase' | 'osm_dataset' = 'osm_dataset';
 
   // ------------------------------------------------------------------
-  // 1. Load Intersections (Vertices V)
+  // 1. Fetch Intersections from Supabase (Vertices V)
   // ------------------------------------------------------------------
-  let rawIntersections: any[] = [];
+  const { data: rawIntersections, error: nodeError } = await supabase
+    .from('intersections')
+    .select('*')
+    .limit(50000);
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('intersections').select('*').limit(10000);
-      if (!error && data && data.length > 0) {
-        rawIntersections = data;
-        dataSource = 'supabase';
-      }
-    } catch {
-      // Handled via bundled OSM dataset
+  if (nodeError) {
+    throw new Error(`Failed to fetch intersections from Supabase table 'intersections': ${nodeError.message}`);
+  }
+
+  if (!rawIntersections || rawIntersections.length === 0) {
+    // If roads exist with start/end coordinates, we will derive nodes below, but log a warning
+    console.warn('[Routing Engine] Table "intersections" returned 0 rows from Supabase.');
+  } else {
+    for (const item of rawIntersections) {
+      const id = String(item.node_id || item.id || '');
+      if (!id) continue;
+      const node: GraphNode = {
+        id,
+        latitude: Number(item.latitude),
+        longitude: Number(item.longitude),
+        name: item.name || `Junction ${id}`,
+        elevation_m: item.elevation_m ? Number(item.elevation_m) : 22.0,
+      };
+      nodes.set(node.id, node);
+      adjacency.set(node.id, []);
     }
   }
 
-  // Use custom overrides or bundled OSM Vijayawada intersections
-  if (rawIntersections.length === 0) {
-    rawIntersections = customIntersectionOverrides && customIntersectionOverrides.length > 0
-      ? customIntersectionOverrides
-      : bundledNetwork.intersections;
-  }
-
-  for (const item of rawIntersections) {
-    const id = String(item.node_id || item.id || '');
-    if (!id) continue;
-    const node: GraphNode = {
-      id,
-      latitude: Number(item.latitude),
-      longitude: Number(item.longitude),
-      name: item.name || `Junction ${id}`,
-      elevation_m: item.elevation_m ? Number(item.elevation_m) : 22.0,
-    };
-    nodes.set(node.id, node);
-    adjacency.set(node.id, []);
-  }
-
   // ------------------------------------------------------------------
-  // 2. Load Roads (Directed Topological Edges E)
+  // 2. Fetch Roads from Supabase (Topological Edges E)
   // ------------------------------------------------------------------
   let rawRoads: any[] = [];
+  if (customRoadOverrides && customRoadOverrides.length > 0) {
+    rawRoads = customRoadOverrides;
+  } else {
+    const { data: roadsData, error: roadError } = await supabase
+      .from('roads')
+      .select('*')
+      .limit(50000);
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('roads').select('*').limit(10000);
-      if (!error && data && data.length > 0) {
-        rawRoads = data;
-        dataSource = 'supabase';
-      }
-    } catch {
-      // Handled via bundled OSM dataset
+    if (roadError) {
+      throw new Error(`Failed to fetch roads from Supabase table 'roads': ${roadError.message}`);
     }
+
+    if (!roadsData || roadsData.length === 0) {
+      throw new Error('Supabase table "roads" is currently empty. Run the OSM upload script to populate Vijayawada roads.');
+    }
+
+    rawRoads = roadsData;
   }
 
-  if (rawRoads.length === 0) {
-    rawRoads = customRoadOverrides && customRoadOverrides.length > 0
-      ? customRoadOverrides
-      : bundledNetwork.roads;
-  }
-
-  totalRoads = rawRoads.length;
+  const totalRoads = rawRoads.length;
 
   for (const road of rawRoads) {
     const roadId = String(road.road_id || road.id || '');
     const status = String(road.status || 'open').toLowerCase();
 
-    // STEP 7: IGNORE BLOCKED ROADS
+    // EXCLUDE BLOCKED ROADS
     if (status === 'blocked' || status === 'flooded') {
       totalBlockedRoadsSkipped++;
       continue;
@@ -104,9 +99,9 @@ export async function buildGraph(
     const endLat = Number(road.end_lat);
     const endLng = Number(road.end_lng);
 
-    // Auto-create/bind node if missing from index
+    // Auto-bind node if missing from the intersections map
     if (!fromNode || !nodes.has(fromNode)) {
-      fromNode = fromNode || `N_AUTO_${roadId}_START`;
+      fromNode = fromNode || `N_${roadId}_START`;
       if (!nodes.has(fromNode)) {
         nodes.set(fromNode, {
           id: fromNode,
@@ -119,7 +114,7 @@ export async function buildGraph(
     }
 
     if (!toNode || !nodes.has(toNode)) {
-      toNode = toNode || `N_AUTO_${roadId}_END`;
+      toNode = toNode || `N_${roadId}_END`;
       if (!nodes.has(toNode)) {
         nodes.set(toNode, {
           id: toNode,
@@ -131,7 +126,7 @@ export async function buildGraph(
       }
     }
 
-    // STEP 6: PRESERVE EXACT OSM ROAD CURVATURE GEOMETRY
+    // PRESERVE EXACT ROAD CURVATURE GEOMETRY
     const geometry = geoJsonToLeafletCoordinates(road.coordinates);
     const edgeGeometry: [number, number][] =
       geometry.length >= 2
@@ -146,13 +141,17 @@ export async function buildGraph(
     // Distances and Travel Times (Meters & Seconds)
     const distanceMeters = road.distance_m
       ? Number(road.distance_m)
+      : road.distance_km
+      ? Number(road.distance_km) * 1000
       : haversineDistance(startLat, startLng, endLat, endLng);
 
     const travelTimeSeconds = road.travel_time_sec
       ? Number(road.travel_time_sec)
-      : Math.max(2, Math.round(distanceMeters / 11.11)); // ~40 km/h baseline
+      : road.travel_time
+      ? Number(road.travel_time) * 60
+      : Math.max(2, Math.round(distanceMeters / 11.11));
 
-    const roadName = road.road_name || 'Vijayawada Corridor';
+    const roadName = road.road_name || road.name || roadId;
 
     // Forward Edge
     const forwardEdge: GraphEdge = {
@@ -169,7 +168,7 @@ export async function buildGraph(
     adjacency.get(fromNode)?.push(forwardEdge);
     totalGraphEdges++;
 
-    // Bidirectional Reverse Edge (for standard two-way OSM drivable streets)
+    // Bidirectional Reverse Edge
     const reverseEdge: GraphEdge = {
       roadId: `${roadId}_rev`,
       from: toNode,
@@ -198,5 +197,5 @@ export async function buildGraph(
     totalGeometryPoints,
   };
 
-  return { graph, stats, source: dataSource };
+  return { graph, stats };
 }

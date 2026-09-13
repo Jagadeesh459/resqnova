@@ -30,3 +30,25 @@ export interface GraphBuildStats {
   totalGeometryPoints?: number;
 }
 
+export interface RouteStep {
+  roadId: string;
+  roadName: string;
+  distanceMeters: number;
+  travelTimeSeconds: number;
+  from: string;
+  to: string;
+  geometry: [number, number][];
+}
+
+export interface RouteResult {
+  pathNodes: string[];
+  roadIds: string[];
+  geometry: [number, number][];
+  distanceMeters: number;
+  travelTimeSeconds: number;
+  visitedNodes: string[];
+  computationTimeMs: number;
+  startNode: GraphNode;
+  targetNode: GraphNode;
+  stepSegments: RouteStep[];
+}

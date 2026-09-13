@@ -71,17 +71,33 @@ export function findNearestNode(
   targetLat: number,
   targetLng: number
 ): string | null {
-  let nearestId: string | null = null;
+  const result = findNearestNodeWithDistance(nodes, targetLat, targetLng);
+  return result ? result.nodeId : null;
+}
+
+/**
+ * Finds the nearest graph node along with distance in meters
+ */
+export function findNearestNodeWithDistance(
+  nodes: Map<string, { id: string; latitude: number; longitude: number }>,
+  targetLat: number,
+  targetLng: number
+): { nodeId: string; distanceMeters: number; node: { id: string; latitude: number; longitude: number } } | null {
+  let nearestResult: { nodeId: string; distanceMeters: number; node: { id: string; latitude: number; longitude: number } } | null = null;
   let minDistance = Infinity;
 
   nodes.forEach((node) => {
     const dist = haversineDistance(targetLat, targetLng, node.latitude, node.longitude);
     if (dist < minDistance) {
       minDistance = dist;
-      nearestId = node.id;
+      nearestResult = {
+        nodeId: node.id,
+        distanceMeters: Math.round(dist),
+        node,
+      };
     }
   });
 
-  return nearestId;
+  return nearestResult;
 }
 

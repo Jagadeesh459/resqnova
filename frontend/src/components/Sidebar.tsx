@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   Brain,
   Network,
+  Navigation,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
@@ -143,6 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenSimulationModal }) => {
         { path: '/resource-planner', label: 'Resource Dispatch', icon: Route, hint: 'A* & priority-queue staging' },
         { path: '/evacuation-planner', label: 'Evac Planner', icon: MapPin, hint: 'Dynamic flood road closures & high ground' },
         { path: '/routing-operations', label: 'Routing Operations', icon: Scale, hint: 'A* & D* Lite dynamic replanning telemetry' },
+        { path: '/routing-demo', label: 'A* Routing Demo', icon: Navigation, hint: 'Judge-ready A* shortest path & road geometry curves' },
         { path: '/routing-test', label: 'Graph Inspector', icon: Network, hint: 'Supabase -> In-memory adjacency graph & topology' },
         { path: '/admin/ai-diagnostics', label: 'AI Diagnostics', icon: Zap, hint: 'Gemini multi-modal flood triage' },
         { path: '/resolved-operations', label: 'Resolved History', icon: CheckCircle2, hint: 'Citywide audit log of completed missions' },

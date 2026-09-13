@@ -15,8 +15,9 @@ import { ResolvedOperationsPage } from './pages/ResolvedOperationsPage';
 import { ShelterPortalPage } from './pages/ShelterPortalPage';
 import { HospitalPortalPage } from './pages/HospitalPortalPage';
 import { RoutingOperationsPage } from './pages/RoutingOperationsPage';
-import { AiFloodPredictorPage } from './pages/AiFloodPredictorPage';
 import { RoutingTestPage } from './pages/RoutingTestPage';
+import { RoutingDemoPage } from './pages/RoutingDemoPage';
+import { AiFloodPredictorPage } from './pages/AiFloodPredictorPage';
 
 const AppContent: React.FC = () => {
   const { activePath } = useResQNova();
@@ -38,6 +39,8 @@ const AppContent: React.FC = () => {
         return <RoutingOperationsPage />;
       case '/routing-test':
         return <RoutingTestPage />;
+      case '/routing-demo':
+        return <RoutingDemoPage />;
       case '/ai-flood-predictor':
         return <AiFloodPredictorPage />;
       case '/admin/ai-diagnostics':
