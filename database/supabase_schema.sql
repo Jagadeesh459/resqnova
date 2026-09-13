@@ -17,27 +17,50 @@ CREATE TABLE IF NOT EXISTS public.intersections (
 
 -- 2. Roads Table (Directed Topological Edges E for A* and D* Lite)
 CREATE TABLE IF NOT EXISTS public.roads (
-    road_id TEXT PRIMARY KEY,                   -- Single primary road identifier (e.g. 'R001', 'rd-1')
-    road_name TEXT NOT NULL,
+    id TEXT PRIMARY KEY,
+    road_id TEXT,
+    road_name TEXT,
     district TEXT DEFAULT 'NTR',
-    source_node TEXT REFERENCES public.intersections(node_id), -- Starting intersection (e.g. 'N001')
-    target_node TEXT REFERENCES public.intersections(node_id), -- Ending intersection (e.g. 'N002')
-    start_lat DOUBLE PRECISION NOT NULL,
-    start_lng DOUBLE PRECISION NOT NULL,
-    end_lat DOUBLE PRECISION NOT NULL,
-    end_lng DOUBLE PRECISION NOT NULL,
-    distance_m DOUBLE PRECISION NOT NULL DEFAULT 2500.0, -- Distance in meters (Single source of truth for A*)
-    travel_time_sec DOUBLE PRECISION NOT NULL DEFAULT 600.0, -- Base travel time in seconds
-    status TEXT NOT NULL DEFAULT 'open',        -- 'open' | 'blocked' | 'flooded'
+    source_node TEXT,
+    target_node TEXT,
+    start_lat DOUBLE PRECISION,
+    start_lng DOUBLE PRECISION,
+    end_lat DOUBLE PRECISION,
+    end_lng DOUBLE PRECISION,
+    distance_m DOUBLE PRECISION DEFAULT 2500.0,
+    travel_time_sec DOUBLE PRECISION DEFAULT 600.0,
+    status TEXT DEFAULT 'open',
     blocked_reason TEXT,
-    coordinates JSONB,                          -- GeoJSON LineString: {"type":"LineString","coordinates":[[lng,lat],...]}
+    coordinates JSONB,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Fast Graph Traversal Indexes (for sub-millisecond A* and D* Lite neighbor expansion)
+-- Safe Column Upgrades (Guarantees missing columns are added to pre-existing tables)
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS road_id TEXT;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS road_name TEXT;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS district TEXT DEFAULT 'NTR';
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS source_node TEXT;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS target_node TEXT;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS start_lat DOUBLE PRECISION;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS start_lng DOUBLE PRECISION;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS end_lat DOUBLE PRECISION;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS end_lng DOUBLE PRECISION;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS distance_m DOUBLE PRECISION DEFAULT 2500.0;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS travel_time_sec DOUBLE PRECISION DEFAULT 600.0;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS coordinates JSONB;
+ALTER TABLE public.roads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- Backfill road_id from id if road_id is NULL
+UPDATE public.roads SET road_id = COALESCE(road_id, id::text) WHERE road_id IS NULL AND id IS NOT NULL;
+
+-- Safe Indexes for sub-millisecond A* and D* Lite expansion
+CREATE UNIQUE INDEX IF NOT EXISTS idx_roads_road_id_unique ON public.roads(road_id);
 CREATE INDEX IF NOT EXISTS idx_roads_source ON public.roads(source_node);
 CREATE INDEX IF NOT EXISTS idx_roads_target ON public.roads(target_node);
 CREATE INDEX IF NOT EXISTS idx_roads_status ON public.roads(status);
+CREATE INDEX IF NOT EXISTS idx_roads_road_id ON public.roads(road_id);
 
 -- 2. Citizen Requests Table
 CREATE TABLE IF NOT EXISTS public.citizen_requests (

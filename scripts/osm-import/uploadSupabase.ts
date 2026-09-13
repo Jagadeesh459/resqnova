@@ -49,10 +49,18 @@ export async function uploadNetworkToSupabase(limitSegments?: number) {
   console.log('[Supabase Upload] Uploading intersections...');
   let uploadedIntersections = 0;
   for (let i = 0; i < intersectionsToUpload.length; i += BATCH_SIZE) {
-    const batch = intersectionsToUpload.slice(i, i + BATCH_SIZE);
+    const batch = intersectionsToUpload.slice(i, i + BATCH_SIZE).map((item: any) => ({
+      node_id: item.node_id,
+      name: item.name || `Junction ${item.node_id}`,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      elevation_m: item.elevation_m || 20.0,
+      district: item.district || 'NTR',
+    }));
+
     const { error } = await supabase.from('intersections').upsert(batch, { onConflict: 'node_id' });
     if (error) {
-      console.warn(`[Supabase Upload] Intersections batch ${i}-${i + batch.length} notice: ${error.message}`);
+      console.warn(`[Supabase Upload] Intersections batch notice: ${error.message}`);
     } else {
       uploadedIntersections += batch.length;
     }
@@ -67,8 +75,9 @@ export async function uploadNetworkToSupabase(limitSegments?: number) {
   let uploadedRoads = 0;
   for (let i = 0; i < roadsToUpload.length; i += BATCH_SIZE) {
     const batch = roadsToUpload.slice(i, i + BATCH_SIZE).map((r: any) => ({
+      id: r.road_id,
       road_id: r.road_id,
-      road_name: r.road_name,
+      road_name: r.road_name || 'Vijayawada Street',
       district: r.district || 'NTR',
       source_node: r.source_node,
       target_node: r.target_node,
@@ -82,9 +91,15 @@ export async function uploadNetworkToSupabase(limitSegments?: number) {
       coordinates: r.coordinates,
     }));
 
-    const { error } = await supabase.from('roads').upsert(batch, { onConflict: 'road_id' });
+    // Attempt upsert on 'id' first, fallback to 'road_id'
+    let { error } = await supabase.from('roads').upsert(batch, { onConflict: 'id' });
+    if (error && error.message.includes('road_id')) {
+      const res = await supabase.from('roads').upsert(batch, { onConflict: 'road_id' });
+      error = res.error;
+    }
+
     if (error) {
-      console.warn(`[Supabase Upload] Roads batch ${i}-${i + batch.length} notice: ${error.message}`);
+      console.warn(`[Supabase Upload] Roads batch notice: ${error.message}`);
     } else {
       uploadedRoads += batch.length;
     }
@@ -106,4 +121,3 @@ if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('uplo
       process.exit(1);
     });
 }
-
