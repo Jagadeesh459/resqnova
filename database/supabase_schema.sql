@@ -17,33 +17,20 @@ CREATE TABLE IF NOT EXISTS public.intersections (
 
 -- 2. Roads Table (Directed Topological Edges E for A* and D* Lite)
 CREATE TABLE IF NOT EXISTS public.roads (
-    id TEXT PRIMARY KEY,
-    road_id TEXT,                               -- Alias matching dataset format (e.g. 'R001')
+    road_id TEXT PRIMARY KEY,                   -- Single primary road identifier (e.g. 'R001', 'rd-1')
     road_name TEXT NOT NULL,
-    name TEXT,
     district TEXT DEFAULT 'NTR',
     source_node TEXT REFERENCES public.intersections(node_id), -- Starting intersection (e.g. 'N001')
     target_node TEXT REFERENCES public.intersections(node_id), -- Ending intersection (e.g. 'N002')
-    source_lat DOUBLE PRECISION,
-    source_lng DOUBLE PRECISION,
-    target_lat DOUBLE PRECISION,
-    target_lng DOUBLE PRECISION,
     start_lat DOUBLE PRECISION NOT NULL,
     start_lng DOUBLE PRECISION NOT NULL,
     end_lat DOUBLE PRECISION NOT NULL,
     end_lng DOUBLE PRECISION NOT NULL,
-    distance_m DOUBLE PRECISION DEFAULT 2500.0, -- Distance in meters for A* cost evaluation
-    distance_km DOUBLE PRECISION DEFAULT 2.5,
-    travel_time_sec DOUBLE PRECISION DEFAULT 600.0, -- Travel time in seconds
-    travel_time_min DOUBLE PRECISION DEFAULT 10.0,
-    travel_time DOUBLE PRECISION DEFAULT 10.0,
-    flood_risk DOUBLE PRECISION DEFAULT 0.0,
-    risk_score DOUBLE PRECISION DEFAULT 10.0,
-    congestion DOUBLE PRECISION DEFAULT 1.0,
-    status TEXT DEFAULT 'open',                 -- 'open' | 'blocked' | 'flooded' | 'restricted'
+    distance_m DOUBLE PRECISION NOT NULL DEFAULT 2500.0, -- Distance in meters (Single source of truth for A*)
+    travel_time_sec DOUBLE PRECISION NOT NULL DEFAULT 600.0, -- Base travel time in seconds
+    status TEXT NOT NULL DEFAULT 'open',        -- 'open' | 'blocked' | 'flooded'
     blocked_reason TEXT,
-    road_type TEXT DEFAULT 'highway',
-    coordinates JSONB,                          -- GeoJSON LineString or [[lat, lng], ...] waypoint array
+    coordinates JSONB,                          -- GeoJSON LineString: {"type":"LineString","coordinates":[[lng,lat],...]}
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

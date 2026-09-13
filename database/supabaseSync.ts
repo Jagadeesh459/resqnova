@@ -45,6 +45,7 @@ export async function fetchCloudRoads(): Promise<Road[]> {
       }
 
       return {
+        road_id: r.road_id || r.id,
         id: r.road_id || r.id,
         road_name: r.road_name || r.name,
         district: r.district || 'NTR',
@@ -80,7 +81,7 @@ export async function syncRoadStatusToCloud(roadId: string, status: string, bloc
         ...(blocked_reason !== undefined && { blocked_reason }),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', roadId);
+      .or(`road_id.eq.${roadId},id.eq.${roadId}`);
 
     if (error) {
       console.warn(`[Supabase Road Update] Notice for ${roadId}:`, error.message);

@@ -142,8 +142,8 @@ export interface Hospital {
 }
 
 export interface Road {
-  id: string;
-  road_id?: string;
+  road_id: string;
+  id?: string; // Optional alias for backward compatibility
   road_name: string;
   district: string;
   source_node?: string;
@@ -154,7 +154,9 @@ export interface Road {
   start_lng: number;
   end_lat: number;
   end_lng: number;
+  distance_m?: number;
   distance_km?: number;
+  travel_time_sec?: number;
   travel_time: number;
   risk_score: number;
   coordinates?: [number, number][];

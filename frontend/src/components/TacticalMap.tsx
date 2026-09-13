@@ -37,15 +37,16 @@ type MapTileStyle = 'tf-transport' | 'tf-outdoors' | 'tf-landscape' | 'carto-dar
 const roadGeometryCache = new Map<string, [number, number][]>();
 
 async function getRoadGeometry(
-  road: { id: string; start_lat?: number; start_lng?: number; end_lat?: number; end_lng?: number },
+  road: { id?: string; road_id?: string; start_lat?: number; start_lng?: number; end_lat?: number; end_lng?: number },
   signal: AbortSignal
 ): Promise<{ id: string; geometry: [number, number][] } | null> {
-  if (road.start_lat == null || road.start_lng == null || road.end_lat == null || road.end_lng == null) {
+  const roadId = road.road_id || road.id || '';
+  if (!roadId || road.start_lat == null || road.start_lng == null || road.end_lat == null || road.end_lng == null) {
     return null;
   }
   const key = `${road.start_lat},${road.start_lng}:${road.end_lat},${road.end_lng}`;
   const cached = roadGeometryCache.get(key);
-  if (cached) return { id: road.id, geometry: cached };
+  if (cached) return { id: roadId, geometry: cached };
 
   const baseUrl =
     (typeof import.meta !== 'undefined' &&
