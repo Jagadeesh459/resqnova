@@ -13,8 +13,12 @@ import {
   recommendSafeShelter,
 } from './routingEngine';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const serverDir =
+  typeof __dirname !== 'undefined'
+    ? __dirname
+    : typeof import.meta?.url === 'string'
+    ? path.dirname(fileURLToPath(import.meta.url))
+    : process.cwd();
 
 dotenv.config();
 
@@ -557,8 +561,8 @@ app.post('/api/route', async (req, res) => {
 async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      root: path.resolve(__dirname, '../frontend'),
-      configFile: path.resolve(__dirname, '../vite.config.ts'),
+      root: path.resolve(serverDir, '../frontend'),
+      configFile: path.resolve(serverDir, '../vite.config.ts'),
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
