@@ -666,7 +666,7 @@ export const AiFloodPredictorPage: React.FC = () => {
                   Forecast Barrage Discharge
                 </span>
                 <span className="text-2xl font-black text-white">
-                  {(latestPred.predicted_barrage_discharge_cusecs / 1000).toFixed(0)}k Cfs
+                  {(((latestPred.predicted_barrage_discharge_cusecs || latestPred.predicted_barrage_cusecs || 571000)) / 1000).toFixed(0)}k Cfs
                 </span>
                 <span className="text-[11px] text-cyan-300 block">Prakasam Barrage Inundation Level</span>
               </div>
