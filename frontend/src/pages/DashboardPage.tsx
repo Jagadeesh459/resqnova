@@ -269,13 +269,13 @@ export const DashboardPage: React.FC = () => {
                   AI Flood Forecast Active:
                 </span>
                 <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold text-[10px]">
-                  {state.latest_ai_flood_prediction.impact_zones.filter((z) => z.impact_level === 'red').length} Red Impact Zones
+                  {(state.latest_ai_flood_prediction.impact_zones || state.latest_ai_flood_prediction.red_impact_zones || []).filter((z) => z.impact_level === 'red' || z.impact_level === 'Critical - Red Area' || z.severity_category === 'red').length} Red Impact Zones
                 </span>
                 <span className="px-2 py-0.5 rounded bg-amber-600 text-white font-bold text-[10px]">
-                  {state.latest_ai_flood_prediction.impact_zones.filter((z) => z.impact_level === 'yellow').length} Yellow Impact Zones
+                  {(state.latest_ai_flood_prediction.impact_zones || state.latest_ai_flood_prediction.yellow_impact_zones || []).filter((z) => z.impact_level === 'yellow' || z.impact_level === 'Warning - Yellow Area' || z.severity_category === 'yellow').length} Yellow Impact Zones
                 </span>
                 <span className="text-slate-300 text-[11px] hidden sm:inline">
-                  • {state.latest_ai_flood_prediction.quantum_prepositioning_points.length} Staged Strategic Logistics Nodes
+                  • {(state.latest_ai_flood_prediction.quantum_prepositioning_points || state.latest_ai_flood_prediction.strategic_prepositioning_points || []).length} Staged Strategic Logistics Nodes
                 </span>
               </div>
               <button
