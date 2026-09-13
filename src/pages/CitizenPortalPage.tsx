@@ -21,11 +21,119 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Siren,
+  AlertOctagon,
+  Bell,
+  BellOff,
+  Sparkles,
 } from 'lucide-react';
-import { getSafeRoute } from '../lib/api';
+import { getAStarRoute, getSafeRoute } from '../lib/api';
+
+interface SosPreset {
+  id: string;
+  title: string;
+  location: string;
+  name: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  hint: string;
+  people: number;
+  children: number;
+  elderly: number;
+  emergencyType: string;
+  urgency: 'low' | 'moderate' | 'critical';
+  tag: string;
+}
+
+const SAMPLE_SOS_PRESETS: SosPreset[] = [
+  {
+    id: 'preset-1',
+    title: 'Krishna Lanka Bund Breach',
+    location: 'Krishna Lanka',
+    name: 'P. Ramesh',
+    phone: '+91 98480 55443',
+    lat: 16.5038,
+    lng: 80.6432,
+    hint: 'Krishna Lanka, Near Water Tank Bund, Water rising 3.5ft',
+    people: 4,
+    children: 1,
+    elderly: 1,
+    emergencyType: 'Flood Trapped',
+    urgency: 'critical',
+    tag: '🌊 3.5ft Inundated',
+  },
+  {
+    id: 'preset-2',
+    title: 'Bhavanipuram Canal Spillway',
+    location: 'Bhavanipuram',
+    name: 'K. Lakshmi',
+    phone: '+91 94401 55210',
+    lat: 16.5245,
+    lng: 80.6110,
+    hint: 'Sri Sai Towers, Canal Road, Bhavanipuram (Water 2.8m)',
+    people: 6,
+    children: 1,
+    elderly: 2,
+    emergencyType: 'Rooftop Evacuation',
+    urgency: 'critical',
+    tag: '🏠 Rooftop Stranded',
+  },
+  {
+    id: 'preset-3',
+    title: 'Ajit Singh Nagar Budameru Breach',
+    location: 'Singh Nagar',
+    name: 'M. Srinivasa Rao',
+    phone: '+91 98492 77114',
+    lat: 16.5365,
+    lng: 80.6425,
+    hint: 'Community Hall, Budameru Rivulet Bank, Pregnant mother in labor',
+    people: 4,
+    children: 1,
+    elderly: 0,
+    emergencyType: 'Medical Emergency',
+    urgency: 'critical',
+    tag: '🤰 Medical Labor',
+  },
+  {
+    id: 'preset-4',
+    title: 'One Town Transformer Submerged',
+    location: 'One Town',
+    name: 'G. Venkat',
+    phone: '+91 91770 44228',
+    lat: 16.5165,
+    lng: 80.6185,
+    hint: 'Near Brahmin Street Panja Centre, 11kV transformer tilted in water',
+    people: 3,
+    children: 0,
+    elderly: 1,
+    emergencyType: 'Electrical Hazard',
+    urgency: 'moderate',
+    tag: '⚡ Submerged Grid',
+  },
+  {
+    id: 'preset-5',
+    title: 'Ramavarappadu Car Underpass',
+    location: 'Ramavarappadu',
+    name: 'T. Anji Reddy',
+    phone: '+91 98485 11002',
+    lat: 16.5195,
+    lng: 80.6785,
+    hint: 'Ramavarappadu Ring Underpass, Vehicle submerged in flash backwater',
+    people: 2,
+    children: 0,
+    elderly: 0,
+    emergencyType: 'Flash Flood Trapped',
+    urgency: 'critical',
+    tag: '🚗 Submerged Car',
+  },
+];
 
 export const CitizenPortalPage: React.FC = () => {
   const { state, submitSos, updateMissionStatus } = useResQNova();
+
+  // Active preset tracker
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('preset-1');
 
   // Form states for submitting or updating SOS
   const [name, setName] = useState('P. Ramesh');
@@ -37,7 +145,25 @@ export const CitizenPortalPage: React.FC = () => {
   const [childrenCount, setChildrenCount] = useState(1);
   const [elderlyCount, setElderlyCount] = useState(1);
   const [emergencyType, setEmergencyType] = useState('Flood Trapped');
-  const [medicalUrgency, setMedicalUrgency] = useState('moderate');
+  const [medicalUrgency, setMedicalUrgency] = useState('critical');
+
+  const handleSelectPreset = (preset: SosPreset) => {
+    setSelectedPresetId(preset.id);
+    setName(preset.name);
+    setPhone(preset.phone);
+    setLatitude(preset.lat);
+    setLongitude(preset.lng);
+    setAddressHint(preset.hint);
+    setPeopleCount(preset.people);
+    setChildrenCount(preset.children);
+    setElderlyCount(preset.elderly);
+    setEmergencyType(preset.emergencyType);
+    setMedicalUrgency(preset.urgency);
+  };
+
+  // Emergency SOS Beacon state
+  const [sosActive, setSosActive] = useState(false);
+  const [audioAlertEnabled, setAudioAlertEnabled] = useState(true);
 
   const [submitting, setSubmitting] = useState(false);
   const [submittedRequestId, setSubmittedRequestId] = useState<string | null>(null);
@@ -53,6 +179,52 @@ export const CitizenPortalPage: React.FC = () => {
     isSafe: boolean;
   } | null>(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
+
+  // Emergency Audio Beep
+  const playEmergencyBeep = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch {}
+  };
+
+  const handleToggleEmergencySos = async () => {
+    const nextState = !sosActive;
+    setSosActive(nextState);
+    if (nextState) {
+      if (audioAlertEnabled) playEmergencyBeep();
+      setSubmitting(true);
+      try {
+        await submitSos({
+          citizen_name: name,
+          citizen_phone: phone,
+          latitude,
+          longitude,
+          address_hint: addressHint,
+          people_count: peopleCount,
+          children_count: childrenCount,
+          elderly_count: elderlyCount,
+          emergency_type: emergencyType,
+          medical_urgency: 'critical',
+        });
+      } finally {
+        setSubmitting(false);
+      }
+    }
+  };
 
   // GPS auto-detect
   const handleDetectGps = () => {
@@ -104,7 +276,7 @@ export const CitizenPortalPage: React.FC = () => {
     return state.rescue_teams.find((t) => t.id === activeRequest.rescue_team_id) || null;
   }, [activeRequest?.rescue_team_id, state?.rescue_teams]);
 
-  // Fetch safe route between Source (SOS) and Destination (Shelter)
+  // Fetch safe route between Source (SOS) and Destination (Shelter) using exact A* algorithm
   useEffect(() => {
     const sLat = activeRequest ? activeRequest.latitude : latitude;
     const sLng = activeRequest ? activeRequest.longitude : longitude;
@@ -114,46 +286,55 @@ export const CitizenPortalPage: React.FC = () => {
     let isMounted = true;
     setLoadingRoute(true);
 
-    getSafeRoute(sLat, sLng, dLat, dLng, 'citizen_evac')
+    getAStarRoute(sLat, sLng, dLat, dLng, 'citizen_evac')
       .then((res) => {
-        if (isMounted) {
-          // If warnings are empty but nearby roads are blocked, formulate clear drainage guidance
-          const warnings = [...res.warnings];
+        if (isMounted && res && res.success && res.coordinates && res.coordinates.length >= 2) {
+          const warnings = [...(res.warnings || [])];
           if (warnings.length === 0) {
             warnings.push(
-              'Drainage Channel Avoidance: Path safely detours away from Bandar Canal overflow onto elevated MG Road.'
+              'Drainage Channel Avoidance: Path safely detours away from flooded canal banks onto elevated dry MG Road.'
             );
           }
           setRouteData({
             coordinates: res.coordinates,
-            distanceKm: res.distanceKm,
-            durationMinutes: res.durationMinutes,
+            distanceKm: res.distance_km,
+            durationMinutes: res.duration_min,
             warnings,
-            isSafe: res.isSafe,
+            isSafe: res.is_safe,
           });
           setLoadingRoute(false);
+        } else {
+          // Fallback via getSafeRoute
+          getSafeRoute(sLat, sLng, dLat, dLng, 'citizen_evac').then((sr) => {
+            if (isMounted) {
+              setRouteData({
+                coordinates: sr.coordinates,
+                distanceKm: sr.distanceKm,
+                durationMinutes: sr.durationMinutes,
+                warnings: sr.warnings.length > 0 ? sr.warnings : [
+                  'Elevated Arterial Reroute: Bypassing submerged canal underpasses.'
+                ],
+                isSafe: sr.isSafe,
+              });
+              setLoadingRoute(false);
+            }
+          });
         }
       })
       .catch((err) => {
         console.error('Route error:', err);
-        if (isMounted) {
-          // Fallback safe line
-          setRouteData({
-            coordinates: [
-              [sLat, sLng],
-              [16.5085, 80.641],
-              [16.512, 80.638],
-              [dLat, dLng],
-            ],
-            distanceKm: 2.6,
-            durationMinutes: 18,
-            warnings: [
-              'Elevated Arterial Reroute: Bypassing submerged Karakatta underpass and flooded canal drains.',
-            ],
-            isSafe: true,
-          });
-          setLoadingRoute(false);
-        }
+        getSafeRoute(sLat, sLng, dLat, dLng, 'citizen_evac').then((sr) => {
+          if (isMounted) {
+            setRouteData({
+              coordinates: sr.coordinates,
+              distanceKm: sr.distanceKm,
+              durationMinutes: sr.durationMinutes,
+              warnings: sr.warnings,
+              isSafe: sr.isSafe,
+            });
+            setLoadingRoute(false);
+          }
+        });
       });
 
     return () => {
@@ -218,12 +399,14 @@ export const CitizenPortalPage: React.FC = () => {
         lng: activeRequest.longitude,
         label: `${activeRequest.citizen_name}'s SOS Location`,
         address: activeRequest.address_hint || 'Krishna Lanka Flood Zone',
+        isSosActive: sosActive,
       }
     : {
         lat: latitude,
         lng: longitude,
         label: `${name}'s SOS Location`,
         address: addressHint,
+        isSosActive: sosActive,
       };
 
   const destinationCoords = assignedShelter
@@ -244,6 +427,135 @@ export const CitizenPortalPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5 pb-16 px-3 sm:px-6">
+      {/* ------------------------------------------------------------- */}
+      {/* 0. PROMINENT EMERGENCY SOS SIGNAL BEACON BAR (ONE-TOUCH DISPATCH) */}
+      {/* ------------------------------------------------------------- */}
+      <div
+        className={`p-4 sm:p-5 rounded-2xl border-2 transition-all shadow-2xl ${
+          sosActive
+            ? 'bg-gradient-to-r from-red-950 via-slate-900 to-red-950 border-red-500 shadow-red-900/60'
+            : 'bg-slate-900/95 border-red-500/40 hover:border-red-500/70'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all ${
+                sosActive
+                  ? 'bg-red-600 border-red-400 text-white animate-bounce shadow-lg shadow-red-600/50'
+                  : 'bg-red-500/20 border-red-500/40 text-red-400'
+              }`}
+            >
+              <Siren className={`h-8 w-8 ${sosActive ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
+                    sosActive
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  }`}
+                >
+                  {sosActive ? '🚨 SOS BEACON BROADCASTING LIVE' : 'ONE-TOUCH EMERGENCY BEACON'}
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  GPS: {latitude.toFixed(4)}, {longitude.toFixed(4)}
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-white mt-0.5">
+                {sosActive
+                  ? 'Distress Beacon Live • NDRF Water Rescue & 108 Fleet Dispatched!'
+                  : 'Trapped by Rising Water? Transmit Emergency SOS Now'}
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {sosActive
+                  ? 'Live GPS beacon active. Command center tracking your coordinates. Stay on elevated high ground.'
+                  : 'Broadcasts instant coordinates, headcount, and vulnerability data directly to NDRF Command Center.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => setAudioAlertEnabled(!audioAlertEnabled)}
+              title={audioAlertEnabled ? 'Mute Siren' : 'Enable Siren'}
+              className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition-colors cursor-pointer"
+            >
+              {audioAlertEnabled ? <Bell className="h-4 w-4 text-amber-400" /> : <BellOff className="h-4 w-4 text-slate-500" />}
+            </button>
+
+            <button
+              id="btn-citizen-sos-broadcast"
+              onClick={handleToggleEmergencySos}
+              disabled={submitting}
+              className={`px-5 py-3 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer ${
+                sosActive
+                  ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse shadow-red-900/60 hover:scale-[1.02]'
+                  : 'bg-red-600 hover:bg-red-500 text-white hover:scale-[1.02] shadow-red-950/50'
+              }`}
+            >
+              <Siren className="h-5 w-5" />
+              <span>{sosActive ? 'Deactivate SOS Signal' : 'Broadcast Live SOS Signal'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* QUICK SAMPLE SOS SCENARIOS / PRESETS (TEST & DEMO SUITE) */}
+      {/* ------------------------------------------------------------- */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚡</span>
+            <span className="font-black text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+              <span>Quick Test SOS Hotspots • నమూనా అత్యవసర పరిస్థితులు</span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-bold border border-blue-500/40">
+                1-Click Load
+              </span>
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            Click any disaster hotspot to immediately recalculate safe A* corridor avoiding local road blockages
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+          {SAMPLE_SOS_PRESETS.map((p) => {
+            const isSelected = selectedPresetId === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handleSelectPreset(p)}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  isSelected
+                    ? 'bg-red-500/20 border-red-500 text-white shadow-lg ring-1 ring-red-500'
+                    : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 text-slate-300 hover:bg-slate-900'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-white text-xs truncate">{p.location}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 font-mono text-slate-300 font-bold">
+                    👥 {p.people}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-300 line-clamp-1 font-medium">{p.title}</div>
+                <div className="flex items-center justify-between pt-0.5 text-[10px]">
+                  <span className="font-bold text-red-400">{p.tag}</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                    p.urgency === 'critical' ? 'bg-red-950 text-red-300 border border-red-800' : 'bg-amber-950 text-amber-300 border border-amber-800'
+                  }`}>
+                    {p.urgency}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ------------------------------------------------------------- */}
       {/* 1. CITIZEN EMERGENCY HEADER & QUICK HELPLINES */}
       {/* ------------------------------------------------------------- */}
@@ -621,6 +933,7 @@ export const CitizenPortalPage: React.FC = () => {
           routePolyline={routeData?.coordinates}
           bypassWarning={bypassWarning}
           focusCoords={[sourceCoords.lat, sourceCoords.lng]}
+          sosActive={sosActive}
           className="shadow-inner"
         />
       </div>

@@ -9,13 +9,27 @@ import {
   Activity,
   Bed,
   Navigation,
-  Compass,
-  ArrowRight,
-  ShieldAlert,
-  Hospital,
   Droplet,
   Plus,
+  Minus,
+  AlertTriangle,
+  XCircle,
+  Truck,
+  ShieldAlert,
+  Hospital,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+} from 'recharts';
 
 export const HospitalPortalPage: React.FC = () => {
   const { state, updateHospital } = useResQNova();
@@ -40,7 +54,7 @@ export const HospitalPortalPage: React.FC = () => {
   }, [hosp?.id]);
 
   if (!hosp) {
-    return <div className="p-8 text-center text-slate-400">Loading Hospital Terminal...</div>;
+    return <div className="p-8 text-center text-slate-400 font-bold">Loading Hospital Terminal...</div>;
   }
 
   const handleSave = async () => {
@@ -64,232 +78,301 @@ export const HospitalPortalPage: React.FC = () => {
     });
   };
 
+  const occupancy = hosp.total_beds - availableBeds;
+  const occupancyPercent = Math.min(100, Math.round((occupancy / hosp.total_beds) * 100));
+
+  // Determine triage traffic-light status
+  const isRed = availableBeds <= 3 || occupancyPercent >= 95;
+  const isYellow = !isRed && (availableBeds <= 15 || occupancyPercent >= 75);
+  const isGreen = !isRed && !isYellow;
+
+  // Donut chart data for current hospital
+  const donutData = [
+    { name: 'Available Beds (ఖాళీ పడకలు)', value: availableBeds, color: '#10b981' },
+    { name: 'Occupied Beds (నిండిన పడకలు)', value: occupancy, color: isRed ? '#ef4444' : isYellow ? '#f59e0b' : '#38bdf8' },
+  ];
+
+  // District comparison data for bar chart
+  const districtChartData = (state?.hospitals || []).map((h) => ({
+    name: h.hospital_name.replace(' Hospital', '').replace(' Apex Trauma', '').replace(' Institute', ''),
+    'Free Beds': h.id === hosp.id ? availableBeds : h.available_beds,
+    'ICU Units': h.id === hosp.id ? icuBeds : h.icu_beds,
+    'Ambulances': h.ambulances_available,
+  }));
+
   return (
     <div className="space-y-6 pb-16 max-w-7xl mx-auto px-2 sm:px-4">
       {/* ------------------------------------------------------------- */}
-      {/* 1. PRIOR HIGHLIGHT: INBOUND AMBULANCE ROUTING & PRE-STAGED TRAUMA BEDS */}
+      {/* 1. UNIVERSAL ILLITERATE-FRIENDLY TRIAGE STATUS BANNER */}
       {/* ------------------------------------------------------------- */}
-      <div className="rounded-2xl bg-gradient-to-r from-sky-950/80 via-slate-900 to-blue-950/80 border-2 border-sky-500/40 p-4 sm:p-5 shadow-2xl space-y-3 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-sky-900/40 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
-              <Stethoscope className="h-5 w-5 animate-pulse" />
+      <div
+        className={`rounded-2xl border-4 p-4 sm:p-6 shadow-2xl transition-all ${
+          isGreen
+            ? 'bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border-emerald-500'
+            : isYellow
+            ? 'bg-gradient-to-r from-amber-950 via-slate-900 to-yellow-950 border-amber-500'
+            : 'bg-gradient-to-r from-red-950 via-slate-900 to-rose-950 border-red-500'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div className="flex items-center gap-4">
+            {/* Giant Traffic Light Icon */}
+            <div
+              className={`h-20 w-20 rounded-2xl flex items-center justify-center text-4xl shadow-xl border-2 shrink-0 ${
+                isGreen
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-400 animate-pulse'
+                  : isYellow
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-400'
+                  : 'bg-red-500/20 text-red-400 border-red-400 animate-bounce'
+              }`}
+            >
+              {isGreen && '🟢'}
+              {isYellow && '🟡'}
+              {isRed && '🔴'}
             </div>
+
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold uppercase tracking-wider text-sky-300">
-                  TRAUMA SURGE & EMERGENCY INTAKE
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
-                  MASS CASUALTY PROTOCOL ACTIVE
+              <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                <span className="text-xs font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700 text-slate-200">
+                  TRAUMA TRIAGE STATUS • ఎమర్జెన్సీ స్థితి
                 </span>
               </div>
-              <h2 className="text-lg font-black text-white tracking-tight">
-                Inbound 108 Fleet Corridors & Pre-Staged Trauma Resources
-              </h2>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                {isGreen && '🟢 READY FOR INTAKE • BEDS OPEN (రోగులు రావచ్చు - పడకలు ఖాళీ)'}
+                {isYellow && '🟡 HIGH SURGE • TRIAGE ACTIVE (రద్దీ ఎక్కువ - ప్రాధాన్యత వైద్యం)'}
+                {isRed && '🔴 EMERGENCY FULL • REDIRECT FLEET (పడకలు లేవు - వేరే ఆసుపత్రికి వెళ్లండి)'}
+              </h1>
+              <p className="text-sm font-semibold text-slate-300 mt-1">
+                {hosp.hospital_name} • {availableBeds} Free Trauma Beds • {icuBeds} ICU Ventilators Active
+              </p>
             </div>
           </div>
 
-          <span className="text-xs font-mono px-3 py-1 rounded-lg bg-sky-950 border border-sky-600 text-sky-200">
-            ER Surge Status: Level-1 Green Corridor
+          {/* Hospital Switcher */}
+          <div className="shrink-0 bg-slate-900/90 border border-slate-700 rounded-xl p-2">
+            <span className="text-[11px] font-bold text-slate-400 block mb-1">Switch Hospital:</span>
+            <select
+              value={hosp.id}
+              onChange={(e) => setSelectedHospId(e.target.value)}
+              className="bg-slate-950 border border-slate-600 rounded-lg px-3 py-2 text-white font-bold text-sm focus:outline-none"
+            >
+              {state?.hospitals.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.hospital_name} ({h.available_beds} beds free)
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* 2. PICTORIAL ICONS & UNIVERSAL CLINICAL GAUGES (FOR ILLITERATES) */}
+      {/* ------------------------------------------------------------- */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* TRAUMA BEDS CARD */}
+        <div className="p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 flex flex-col items-center text-center shadow-lg">
+          <div className="text-4xl mb-2">🛏️</div>
+          <span className="text-xs font-bold text-slate-400 uppercase">Available Beds</span>
+          <span className="text-3xl font-black text-emerald-400 font-mono my-1">{availableBeds}</span>
+          <span className="text-[11px] text-slate-400 font-semibold">Total: {hosp.total_beds} Beds</span>
+          <div className="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+            <div
+              className={`h-full ${isGreen ? 'bg-emerald-500' : isYellow ? 'bg-amber-500' : 'bg-red-500'}`}
+              style={{ width: `${(availableBeds / hosp.total_beds) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* ICU VENTILATORS CARD */}
+        <div className="p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 flex flex-col items-center text-center shadow-lg">
+          <div className="text-4xl mb-2">🫁</div>
+          <span className="text-xs font-bold text-slate-400 uppercase">ICU Ventilators</span>
+          <span className="text-3xl font-black text-cyan-400 font-mono my-1">{icuBeds}</span>
+          <span className="text-[11px] text-cyan-300 font-semibold flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3 text-cyan-400" /> Critical Care Ready
           </span>
+          <div className="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+            <div className="h-full bg-cyan-400" style={{ width: `${Math.min(100, icuBeds * 10)}%` }} />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1">
-          <div className="p-2.5 rounded-xl bg-slate-950/70 border border-sky-900/40 space-y-1">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="flex items-center gap-1 font-semibold text-white">
-                <Navigation className="h-3.5 w-3.5 text-sky-400" /> Inbound Green Corridor
-              </span>
-              <span className="text-emerald-400 font-mono font-bold">CLEARED</span>
-            </div>
-            <p className="text-slate-300 text-[11px]">
-              Ambulances transit via elevated flyover direct to GGH trauma ramp, completely clear of waterlogging.
-            </p>
+        {/* BLOOD BANK CARD */}
+        <div className="p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 flex flex-col items-center text-center shadow-lg">
+          <div className="text-4xl mb-2">🩸</div>
+          <span className="text-xs font-bold text-slate-400 uppercase">Emergency Blood</span>
+          <span className="text-3xl font-black text-red-400 font-mono my-1">450</span>
+          <span className="text-[11px] text-red-300 font-semibold">Units O+ / B+ Stocked</span>
+          <div className="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+            <div className="h-full bg-red-500" style={{ width: '92%' }} />
           </div>
+        </div>
 
-          <div className="p-2.5 rounded-xl bg-slate-950/70 border border-sky-900/40 space-y-1">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="flex items-center gap-1 font-semibold text-white">
-                <Bed className="h-3.5 w-3.5 text-emerald-400" /> Pre-Staged Trauma Beds
-              </span>
-              <span className="text-emerald-400 font-mono font-bold">{availableBeds} Available</span>
-            </div>
-            <p className="text-slate-300 text-[11px]">
-              {icuBeds} Ventilator ICU beds and {emergencyCapacity} Emergency Ward triage beds reserved for flood casualties.
-            </p>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-slate-950/70 border border-sky-900/40 space-y-1">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="flex items-center gap-1 font-semibold text-white">
-                <Droplet className="h-3.5 w-3.5 text-red-400" /> Blood & Oxygen Bank
-              </span>
-              <span className="text-emerald-400 font-mono font-bold">100% SECURE</span>
-            </div>
-            <p className="text-slate-300 text-[11px]">
-              Liquid Medical Oxygen (LMO) tank at 98% capacity with 450 units of O+ and B+ blood staged.
-            </p>
+        {/* 108 AMBULANCES CARD */}
+        <div className="p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 flex flex-col items-center text-center shadow-lg">
+          <div className="text-4xl mb-2">🚑</div>
+          <span className="text-xs font-bold text-slate-400 uppercase">108 Fleet On Standby</span>
+          <span className="text-3xl font-black text-sky-400 font-mono my-1">
+            {hosp.ambulances_available ?? 4}
+          </span>
+          <span className="text-[11px] text-emerald-300 font-semibold flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Green Corridor Open
+          </span>
+          <div className="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+            <div className="h-full bg-sky-400" style={{ width: '85%' }} />
           </div>
         </div>
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 2. HOSPITAL SELECTOR & FACILITY HEADER */}
-      {/* ------------------------------------------------------------- */}
-      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
-            <Hospital className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">{hosp.hospital_name}</h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                Government Apex Trauma Hospital
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Address: {hosp.address} • Trauma Direct: {hosp.contact_number}
-            </p>
-          </div>
-        </div>
-
-        {/* Hospital Switcher */}
-        <div className="flex items-center gap-2 text-xs">
-          <select
-            value={hosp.id}
-            onChange={(e) => setSelectedHospId(e.target.value)}
-            className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none font-medium"
-          >
-            {state?.hospitals.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.hospital_name} ({h.available_beds} beds free)
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------- */}
-      {/* 3. MAIN CLINICAL GRID: BED MANAGEMENT & TRAUMA NETWORK */}
+      {/* 3. VISUAL CHARTS SECTION (DONUT & BAR CHART) */}
       {/* ------------------------------------------------------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 6 Cols: Bed & Emergency Capacity Management */}
-        <div className="lg:col-span-6 space-y-4">
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Bed className="h-4 w-4 text-sky-400" />
-                Trauma Surge & Critical Care Allocation
-              </h3>
+        {/* Left 5 Cols: Donut Chart for Hospital Bed Capacity */}
+        <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <span className="text-lg">📊</span> Trauma Bed Chart (పడకల చార్ట్)
+            </h3>
+            <span className="text-xs font-mono font-bold text-sky-400">{occupancyPercent}% Occupied</span>
+          </div>
+
+          <div className="h-64 relative flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={donutData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={95}
+                  paddingAngle={4}
+                  dataKey="value"
+                >
+                  {donutData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#fff' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+
+            {/* Icon & Count in Donut Hole */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-3xl">🛏️</span>
+              <span className="text-2xl font-black text-white font-mono mt-0.5">{availableBeds}</span>
+              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Free Beds</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-center text-xs pt-1">
+            <div className="p-2 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
+              <span className="font-bold text-emerald-400 block text-base font-mono">{availableBeds}</span>
+              <span className="text-[11px] text-slate-300">🟢 Available (ఖాళీ)</span>
+            </div>
+            <div className="p-2 rounded-xl bg-sky-950/40 border border-sky-800/60">
+              <span className="font-bold text-sky-300 block text-base font-mono">{occupancy}</span>
+              <span className="text-[11px] text-slate-300">🔵 Occupied (రోగులు)</span>
+            </div>
+          </div>
+
+          {/* Quick Casualty Admission Buttons */}
+          <div className="pt-2 border-t border-slate-800 space-y-2">
+            <span className="text-xs font-bold text-slate-300 uppercase block">
+              ⚡ Rapid Casualty Admission (అంబులెన్స్ అడ్మిషన్):
+            </span>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                onClick={() => handleCasualtyIntake(-1)}
+                disabled={availableBeds <= 0}
+                className="p-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer shadow-lg disabled:opacity-50"
               >
-                <Save className="h-3.5 w-3.5" />
-                {saving ? 'Updating...' : 'Sync to Command'}
+                <span className="text-base">🚨 Admit Casualty</span>
+                <span className="text-[10px] text-red-200">(-1 Bed / పడక కేటాయింపు)</span>
               </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <label className="block text-slate-300 font-medium mb-1 text-[11px]">General Beds</label>
-                <input
-                  type="number"
-                  min="0"
-                  max={hosp.total_beds}
-                  value={availableBeds}
-                  onChange={(e) => setAvailableBeds(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold text-sm"
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">Total: {hosp.total_beds}</span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <label className="block text-slate-300 font-medium mb-1 text-[11px]">Emergency Ward</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={emergencyCapacity}
-                  onChange={(e) => setEmergencyCapacity(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold text-sm"
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">Trauma Triage</span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <label className="block text-slate-300 font-medium mb-1 text-[11px]">ICU Ventilators</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={icuBeds}
-                  onChange={(e) => setIcuBeds(Number(e.target.value))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold text-sm"
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">Critical Care</span>
-              </div>
-            </div>
-
-            {/* Quick Casualty Admission Buttons */}
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <span className="font-bold text-white uppercase text-[11px] tracking-wider block">
-                Emergency Ambulance Casualty Admission:
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleCasualtyIntake(-1)}
-                  disabled={availableBeds <= 0}
-                  className="flex-1 p-2 rounded-lg bg-red-600/20 text-red-300 border border-red-500/40 hover:bg-red-600/30 font-bold transition-all text-center cursor-pointer"
-                >
-                  Admit Critical Casualty (-1 Bed)
-                </button>
-                <button
-                  onClick={() => handleCasualtyIntake(1)}
-                  disabled={availableBeds >= hosp.total_beds}
-                  className="flex-1 p-2 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 font-bold transition-all text-center cursor-pointer"
-                >
-                  Discharge Stabilized (+1 Bed)
-                </button>
-              </div>
+              <button
+                onClick={() => handleCasualtyIntake(1)}
+                disabled={availableBeds >= hosp.total_beds}
+                className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer shadow-lg disabled:opacity-50"
+              >
+                <span className="text-base">🩹 Discharge / Stabilized</span>
+                <span className="text-[10px] text-emerald-200">(+1 Bed / పడక విడుదల)</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Right 6 Cols: District Trauma Network */}
-        <div className="lg:col-span-6 space-y-4">
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-              NTR District Hospital Trauma Network
-            </h3>
+        {/* Right 7 Cols: NTR District Trauma Hospitals Comparative Bar Chart */}
+        <div className="lg:col-span-7 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span className="text-lg">📈</span> NTR District Hospitals Availability (అన్ని ఆసుపత్రులు)
+              </h3>
+              <p className="text-[11px] text-slate-400">Higher Green & Blue Bars = More Capacity (ఎక్కువ పడకలు ఉన్న ఆసుపత్రి)</p>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? 'Saving...' : 'Sync Data'}
+            </button>
+          </div>
 
-            <div className="space-y-2.5">
-              {state?.hospitals.map((h) => (
-                <div
-                  key={h.id}
-                  onClick={() => setSelectedHospId(h.id)}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer text-xs ${
-                    h.id === hosp.id
-                      ? 'bg-sky-600/15 border-sky-500 shadow-md'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">{h.hospital_name}</span>
-                    <span className="font-mono text-sky-300 font-bold">
-                      {h.available_beds} of {h.total_beds} beds free
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-slate-400 mt-2">
-                    <span>Emergency Ward: {h.emergency_capacity}</span>
-                    <span>ICU Units: {h.icu_beds}</span>
-                    <span>Ambulances: {h.ambulances_available}</span>
-                  </div>
-                </div>
-              ))}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={districtChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} angle={-15} textAnchor="end" />
+                <YAxis stroke="#94a3b8" fontSize={11} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#fff' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                <Bar dataKey="Free Beds" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="ICU Units" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Ambulances" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Quick Beds & ICU Allocation Inputs */}
+          <div className="pt-2 border-t border-slate-800 grid grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="block text-slate-300 font-bold mb-1">🛏️ Available Beds</label>
+              <input
+                type="number"
+                min="0"
+                max={hosp.total_beds}
+                value={availableBeds}
+                onChange={(e) => setAvailableBeds(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold text-center"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-bold mb-1">🏥 Emergency Ward</label>
+              <input
+                type="number"
+                min="0"
+                value={emergencyCapacity}
+                onChange={(e) => setEmergencyCapacity(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold text-center"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-bold mb-1">🫁 ICU Ventilators</label>
+              <input
+                type="number"
+                min="0"
+                value={icuBeds}
+                onChange={(e) => setIcuBeds(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold text-center"
+              />
             </div>
           </div>
         </div>

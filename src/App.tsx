@@ -14,7 +14,7 @@ import { AiDiagnosticsPage } from './pages/AiDiagnosticsPage';
 import { ResolvedOperationsPage } from './pages/ResolvedOperationsPage';
 import { ShelterPortalPage } from './pages/ShelterPortalPage';
 import { HospitalPortalPage } from './pages/HospitalPortalPage';
-import { QuantumComparisonPage } from './pages/QuantumComparisonPage';
+import { RoutingOperationsPage } from './pages/RoutingOperationsPage';
 import { AiFloodPredictorPage } from './pages/AiFloodPredictorPage';
 
 const AppContent: React.FC = () => {
@@ -33,8 +33,8 @@ const AppContent: React.FC = () => {
         return <ResourcePlannerPage />;
       case '/evacuation-planner':
         return <EvacuationPlannerPage />;
-      case '/quantum-vs-classical':
-        return <QuantumComparisonPage />;
+      case '/routing-operations':
+        return <RoutingOperationsPage />;
       case '/ai-flood-predictor':
         return <AiFloodPredictorPage />;
       case '/admin/ai-diagnostics':
@@ -75,7 +75,7 @@ const AppContent: React.FC = () => {
               <span>•</span>
               <span>Autonomous AI Triage Engine</span>
               <span>•</span>
-              <span>QAOA / QUBO Combinatorial Solver</span>
+              <span>Dynamic Graph Routing Engine (A* + D* Lite)</span>
             </div>
           </div>
         </footer>

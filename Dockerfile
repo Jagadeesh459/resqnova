@@ -1,6 +1,6 @@
-# ==============================================================================
+﻿# ==============================================================================
 # ResQNova Production Dockerfile for Render / Cloud Containers
-# Combines Node.js 22 LTS (Full Stack Express + React) & Python 3.12 (Qiskit 2.5)
+# Combines Node.js 22 LTS (Full Stack Express + React) & Python 3.12 (A* + D* Lite Dynamic Routing)
 # ==============================================================================
 
 FROM python:3.12-slim-bookworm
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# 2. Install Python Qiskit dependencies
+# 2. Install Python Dynamic Routing dependencies
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
@@ -32,16 +32,12 @@ COPY . .
 # 5. Build Vite frontend bundle and compile Express server into dist/
 RUN npm run build
 
-# 6. Verify Python Qiskit engine installation during container build
-RUN python quantum_service.py --test
-
-# 7. Environment & Port configuration
+# 6. Environment & Port configuration
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV PYTHON_PATH=python3
 
 EXPOSE 3000
 
-# 8. Launch unified production server
+# 7. Launch unified production server
 CMD ["node", "dist/server.cjs"]
-

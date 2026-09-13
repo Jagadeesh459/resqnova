@@ -207,11 +207,11 @@ export const AiFloodPredictorPage: React.FC = () => {
       },
     ];
 
-    // Formulate Quantum Pre-Positioning Staging Points (QUBO Solution)
+    // Formulate Strategic Pre-Positioning Staging Points (Dynamic Graph Optimization)
     const quantumPoints: QuantumPrepositionPoint[] = [
       {
         id: 'qubo-prep-1',
-        title: 'Quantum Pre-Positioned Boat Squad Alpha (Krishna Jetty)',
+        title: 'Strategic Pre-Positioned Boat Squad Alpha (Krishna Jetty)',
         type: 'boat_squad',
         latitude: 16.5028,
         longitude: 80.6405,
@@ -224,7 +224,7 @@ export const AiFloodPredictorPage: React.FC = () => {
       },
       {
         id: 'qubo-prep-2',
-        title: 'Quantum Pre-Positioned 108 ALS Ambulance (Varadhi South Ramp)',
+        title: 'Strategic Pre-Positioned 108 ALS Ambulance (Varadhi South Ramp)',
         type: 'ambulance_als',
         latitude: 16.4985,
         longitude: 80.636,
@@ -237,7 +237,7 @@ export const AiFloodPredictorPage: React.FC = () => {
       },
       {
         id: 'qubo-prep-3',
-        title: 'Quantum Pre-Positioned High-Ground Relief Hub (IGMC)',
+        title: 'Strategic Pre-Positioned High-Ground Relief Hub (IGMC)',
         type: 'relief_staging',
         latitude: 16.5085,
         longitude: 80.6425,
@@ -250,7 +250,7 @@ export const AiFloodPredictorPage: React.FC = () => {
       },
       {
         id: 'qubo-prep-4',
-        title: 'Quantum Drone Aerial Telemetry Relay (Gandhi Hill)',
+        title: 'Strategic Drone Aerial Telemetry Relay (Gandhi Hill)',
         type: 'drone_relay',
         latitude: 16.516,
         longitude: 80.624,
@@ -289,7 +289,7 @@ export const AiFloodPredictorPage: React.FC = () => {
     await saveAiFloodPrediction(result);
     setIsPredicting(false);
     setPredictionSuccessMessage(
-      `AI Flood Prediction completed! Quantum Optimizer successfully generated ${impactZones.length} Impact Zones (Red & Yellow Areas) and ${quantumPoints.length} Strategic Pre-Positioning Nodes on the map.`
+      `AI Flood Prediction completed! Dynamic Optimization successfully generated ${impactZones.length} Impact Zones (Red & Yellow Areas) and ${quantumPoints.length} Strategic Pre-Positioning Nodes on the map.`
     );
   };
 
@@ -308,17 +308,17 @@ export const AiFloodPredictorPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-blue-300">
-                NEURAL FLOOD FORECASTING & QUANTUM STAGING ENGINE
+                NEURAL FLOOD FORECASTING & DYNAMIC STAGING ENGINE
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 ACTIVE AI PIPELINE
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              AI Flood Predictor & Quantum Pre-Positioning Optimizer
+              AI Flood Predictor & Strategic Pre-Positioning Planner
             </h1>
             <p className="text-xs text-slate-300 mt-0.5 max-w-3xl">
-              Train neural hydrological models on Krishna river catchment telemetry datasets, forecast peak inundation surge, and activate QUBO quantum optimization to stage boats and ambulances across <b>Red and Yellow impact zones</b> prior to disaster cresting.
+              Train neural hydrological models on Krishna river catchment telemetry datasets, forecast peak inundation surge, and activate dynamic graph optimization to stage boats and ambulances across <b>Red and Yellow impact zones</b> prior to disaster cresting.
             </p>
           </div>
         </div>
@@ -527,18 +527,19 @@ export const AiFloodPredictorPage: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* SECTION 2: LIVE AI FLOOD PREDICTION & QUANTUM OPTIMIZATION */}
+      {/* ------------------------------------------------------------- */}
+      {/* SECTION 2: LIVE AI FLOOD PREDICTION & STRATEGIC PRE-POSITIONING */}
       {/* ------------------------------------------------------------- */}
       <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-cyan-400" />
             <h2 className="text-sm sm:text-base font-bold text-white">
-              2. Live Flood Prediction & Quantum Optimizer Pre-Positioning
+              2. Live Flood Prediction & Strategic Pre-Positioning
             </h2>
           </div>
           <span className="text-xs text-blue-300 font-mono">
-            QUBO Mathematical Combinatorial Formulation Active
+            Dynamic Graph Allocation Active
           </span>
         </div>
 
@@ -627,8 +628,8 @@ export const AiFloodPredictorPage: React.FC = () => {
             <Sparkles className={`h-5 w-5 ${isPredicting ? 'animate-spin' : ''}`} />
             <span>
               {isPredicting
-                ? 'Predicting Flood Surge & Solving Quantum Pre-Positioning QUBO...'
-                : '⚡ Run AI Flood Prediction & Quantum Optimizer'}
+                ? 'Predicting Flood Surge & Calculating Strategic Staging...'
+                : '⚡ Run AI Flood Prediction & Strategic Staging'}
             </span>
           </button>
         </div>
@@ -715,7 +716,7 @@ export const AiFloodPredictorPage: React.FC = () => {
 
                       <div className="p-2 rounded bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300">
                         <span className="text-slate-500 block text-[10px] uppercase font-bold">
-                          Quantum Pre-Positioning Directive:
+                          Strategic Pre-Positioning Directive:
                         </span>
                         <span>{zone.quantum_preposition_needed}</span>
                       </div>
@@ -725,12 +726,12 @@ export const AiFloodPredictorPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quantum Optimizer Pre-Positioning Staging Points */}
+            {/* Strategic Pre-Positioning Staging Points */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                   <Anchor className="h-4 w-4 text-cyan-400" />
-                  Quantum Optimizer Pre-Positioning Staging Nodes (Prior to Peak):
+                  Strategic Pre-Positioning Staging Nodes (Prior to Peak):
                 </h3>
                 <span className="text-xs text-cyan-400 font-mono">
                   All 4 Nodes Staged on High Ground
@@ -745,7 +746,7 @@ export const AiFloodPredictorPage: React.FC = () => {
                   >
                     <div>
                       <div className="flex items-center justify-between text-[11px] mb-1">
-                        <span className="font-mono text-cyan-400 font-bold">QUBO RANK #{point.qubo_rank}</span>
+                        <span className="font-mono text-cyan-400 font-bold">STAGING PRIORITY #{point.qubo_rank}</span>
                         <span className="text-emerald-400 font-bold">Elev: {point.dry_ground_elevation_m}m</span>
                       </div>
                       <h5 className="font-bold text-white line-clamp-1">{point.title}</h5>
@@ -754,7 +755,7 @@ export const AiFloodPredictorPage: React.FC = () => {
 
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
                       <span>Covering: <b>{point.coverage_sector}</b></span>
-                      <span className="text-cyan-300 font-mono font-bold">ΔE: -{point.qubo_energy_delta}%</span>
+                      <span className="text-cyan-300 font-mono font-bold">Priority Score: {point.qubo_energy_delta}</span>
                     </div>
                   </div>
                 ))}
@@ -765,17 +766,17 @@ export const AiFloodPredictorPage: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* SECTION 3: TACTICAL MAP WITH AI RED/YELLOW ZONES & QUANTUM NODES */}
+      {/* SECTION 3: TACTICAL MAP WITH AI RED/YELLOW ZONES & STAGING NODES */}
       {/* ------------------------------------------------------------- */}
       <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
           <div>
             <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
               <Layers className="h-5 w-5 text-blue-400" />
-              Tactical Map: AI Flood Inundation Zones & Quantum Pre-Positioning
+              Tactical Map: AI Flood Inundation Zones & Strategic Pre-Positioning
             </h2>
             <p className="text-xs text-slate-400">
-              Visualizing the AI predicted <b>Red Area (Severe)</b>, <b>Yellow Area (Moderate)</b>, and Quantum staged watercraft/ambulance units prior to flood cresting.
+              Visualizing the AI predicted <b>Red Area (Severe)</b>, <b>Yellow Area (Moderate)</b>, and strategically staged watercraft/ambulance units prior to flood cresting.
             </p>
           </div>
 
@@ -787,7 +788,7 @@ export const AiFloodPredictorPage: React.FC = () => {
               <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Yellow Area (1.5-3.5m)
             </span>
             <span className="flex items-center gap-1 text-cyan-400 font-semibold">
-              <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" /> Quantum Staging
+              <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" /> Strategic Staging
             </span>
           </div>
         </div>

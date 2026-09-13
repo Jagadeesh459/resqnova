@@ -11,9 +11,11 @@ import {
   RefreshCw,
   Sliders,
   Compass,
+  Route,
+  Activity,
 } from 'lucide-react';
 import { optimizeResources } from '../lib/api';
-import { QuantumOptimizationResult } from '../types';
+import { DynamicRoutingOptimizationResult } from '../types';
 
 export const ResourcePlannerPage: React.FC = () => {
   const { state } = useResQNova();
@@ -21,7 +23,7 @@ export const ResourcePlannerPage: React.FC = () => {
   const [riskWeight, setRiskWeight] = useState(1.5);
   const [travelWeight, setTravelWeight] = useState(0.8);
   const [solving, setSolving] = useState(false);
-  const [result, setResult] = useState<QuantumOptimizationResult | null>(null);
+  const [result, setResult] = useState<DynamicRoutingOptimizationResult | null>(null);
 
   const handleRunOptimization = async () => {
     setSolving(true);
@@ -41,28 +43,28 @@ export const ResourcePlannerPage: React.FC = () => {
       <div className="p-4 rounded-xl bg-gradient-to-r from-blue-950/40 via-slate-900 to-slate-900 border border-blue-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
-            <Cpu className="h-6 w-6" />
+            <Route className="h-6 w-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-white tracking-tight">
-                Quantum Resource Pre-Positioning Optimizer (QAOA / QUBO)
+                Dynamic Resource Allocation & Pre-Positioning Planner
               </h2>
               <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                Variational Circuit (p=2)
+                Priority Queue + A* Graph
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Formulates quadratic unconstrained binary optimization (QUBO) across Vijayawada flood sectors.
+              Formulates shortest ETA and risk-weighted graph assignments across Vijayawada flood sectors.
             </p>
           </div>
         </div>
 
         <button
-          id="btn-run-qaoa-optimizer"
+          id="btn-run-dynamic-optimizer"
           onClick={handleRunOptimization}
           disabled={solving}
-          className={`px-4 py-2 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-2 transition-all cursor-pointer ${
             solving
               ? 'bg-slate-700 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40 hover:scale-[1.01]'
@@ -70,11 +72,11 @@ export const ResourcePlannerPage: React.FC = () => {
         >
           {solving ? (
             <>
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Simulating QAOA Statevector...
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Solving Graph Traversal...
             </>
           ) : (
             <>
-              <Zap className="h-3.5 w-3.5 fill-current" /> Execute Quantum Pre-Positioning Solver
+              <Zap className="h-3.5 w-3.5 fill-current" /> Execute Dynamic Resource Dispatch
             </>
           )}
         </button>
@@ -87,17 +89,17 @@ export const ResourcePlannerPage: React.FC = () => {
             <div className="border-b border-slate-800 pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Sliders className="h-4 w-4 text-blue-400" />
-                Hamiltonian Weights & QUBO Penalty
+                Dynamic Edge Cost Weights
               </h3>
               <p className="text-slate-400 text-[11px] mt-0.5">
-                Objective: Minimize ∑ C(i,j) · x(i,j) + λ ∑ (∑ x(i,j) - 1)²
+                Cost(u,v) = 1.0·d + 1.5·t + 5.0·(flood_risk × 10) + 1.0·congestion
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-slate-300 mb-1">
-                  <span>Risk Zone Priority Weight ($\alpha$)</span>
+                  <span>Risk Zone Priority Weight</span>
                   <span className="font-mono font-bold text-blue-400">{riskWeight}x</span>
                 </div>
                 <input
@@ -113,7 +115,7 @@ export const ResourcePlannerPage: React.FC = () => {
 
               <div>
                 <div className="flex justify-between text-slate-300 mb-1">
-                  <span>Transit Distance Penalty ($\beta$)</span>
+                  <span>Transit Distance Penalty</span>
                   <span className="font-mono font-bold text-blue-400">{travelWeight}x</span>
                 </div>
                 <input
@@ -136,67 +138,50 @@ export const ResourcePlannerPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Quantum Circuit Telemetry */}
+          {/* Engine Telemetry */}
           {result && (
             <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3 text-xs">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <h4 className="font-bold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                  <Cpu className="h-4 w-4 text-blue-400" />
-                  Circuit Telemetry
+                  <Activity className="h-4 w-4 text-blue-400" />
+                  Routing Engine Telemetry
                 </h4>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                  result.backend_engine === 'qiskit_python'
-                    ? 'bg-purple-950/60 text-purple-300 border-purple-500/50'
-                    : 'bg-cyan-950/60 text-cyan-300 border-cyan-500/50'
-                }`}>
-                  {result.backend_engine === 'qiskit_python'
-                    ? `⚡ Qiskit ${result.qiskit_version || '2.5.2'} (Python QAOA)`
-                    : '🔬 Pure TS Statevector'}
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-cyan-950/60 text-cyan-300 border-cyan-500/50">
+                  {result.backend_engine || 'Dynamic Graph Engine'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="p-2 rounded bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Qubit Count</span>
-                  <span className="font-mono font-bold text-white">{result.num_qubits} Qubits</span>
+                  <span className="text-slate-500 block">Method</span>
+                  <span className="font-mono font-bold text-white text-[10px] truncate block">{result.method}</span>
                 </div>
                 <div className="p-2 rounded bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Circuit Depth</span>
-                  <span className="font-mono font-bold text-white">{result.circuit_depth} layers</span>
+                  <span className="text-slate-500 block">Compute Latency</span>
+                  <span className="font-mono font-bold text-emerald-400">{result.runtime_ms} ms</span>
                 </div>
                 <div className="p-2 rounded bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Optimal $\gamma$</span>
+                  <span className="text-slate-500 block">Graph Cost</span>
                   <span className="font-mono font-bold text-blue-400">
-                    [{result.optimal_parameters.gamma.map((g) => g.toFixed(2)).join(', ')}]
+                    {result.objective_value.toFixed(1)}
                   </span>
                 </div>
                 <div className="p-2 rounded bg-slate-950 border border-slate-800">
-                  <span className="text-slate-500 block">Optimal $\beta$</span>
-                  <span className="font-mono font-bold text-blue-400">
-                    [{result.optimal_parameters.beta.map((b) => b.toFixed(2)).join(', ')}]
+                  <span className="text-slate-500 block">Constraints Satisfied</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {result.constraints_satisfied ? '100% Valid' : 'Violations'}
                   </span>
                 </div>
               </div>
 
-              {result.pauli_ising_hamiltonian && result.pauli_ising_hamiltonian.length > 0 && (
-                <div className="p-2 rounded bg-slate-950 border border-slate-800 space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-amber-400 block">Ising Pauli Operators:</span>
-                  <div className="font-mono text-[10px] text-amber-200/80 space-y-0.5 overflow-x-auto max-h-20">
-                    {result.pauli_ising_hamiltonian.slice(0, 4).map((p, idx) => (
-                      <div key={idx}>{p}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div className="p-2.5 rounded bg-emerald-950/20 border border-emerald-500/30 text-[11px]">
                 <div className="flex items-center justify-between font-bold text-emerald-300">
-                  <span>QAOA vs Classical Baseline</span>
-                  <span>+{result.gap_or_improvement_pct}% Gain</span>
+                  <span>Routing Optimization vs Static Base</span>
+                  <span>+{result.gap_or_improvement_pct}% ETA Gain</span>
                 </div>
                 <div className="text-slate-400 mt-1 flex justify-between">
-                  <span>Quantum Objective: {result.objective_value}</span>
-                  <span>Greedy: {result.classical_baseline_value}</span>
+                  <span>Optimized Cost: {result.objective_value}</span>
+                  <span>Baseline: {result.classical_baseline_value}</span>
                 </div>
               </div>
             </div>
@@ -210,7 +195,7 @@ export const ResourcePlannerPage: React.FC = () => {
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  Pre-Positioning Deployment Plan (QUBO Decoded)
+                  Dynamic Deployment Plan ({result.allocations.length} Allocations)
                 </h3>
                 <span className="text-xs text-slate-400 font-mono">
                   Solved in {result.runtime_ms} ms
@@ -250,12 +235,12 @@ export const ResourcePlannerPage: React.FC = () => {
           ) : (
             <div className="p-12 rounded-xl bg-slate-900 border border-slate-800 text-center space-y-3">
               <div className="h-12 w-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto">
-                <Cpu className="h-6 w-6" />
+                <Route className="h-6 w-6" />
               </div>
-              <h4 className="text-base font-bold text-white">Quantum Optimizer Ready</h4>
+              <h4 className="text-base font-bold text-white">Dynamic Routing Optimizer Ready</h4>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Click "Execute Quantum Pre-Positioning Solver" above to formulate the combinatorial QUBO
-                hamiltonian and simulate QAOA parameterized statevectors for Vijayawada.
+                Click "Execute Dynamic Resource Dispatch" above to calculate shortest-ETA priority queue
+                allocations and A* real road corridors for Vijayawada flood zones.
               </p>
             </div>
           )}

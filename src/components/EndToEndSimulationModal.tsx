@@ -49,8 +49,8 @@ export const EndToEndSimulationModal: React.FC<EndToEndSimulationModalProps> = (
     { id: 12, title: 'Casualty Transfer to Trauma Center', desc: 'Government General Hospital (GGH) admits 1 critical casualty; bed count decrements.', status: 'pending' },
     { id: 13, title: 'Shelter Influx Check-in', desc: '4 civilians checked into IGMC Stadium; available capacity decreases.', status: 'pending' },
     { id: 14, title: 'Mission Resolution ("completed")', desc: 'SOS request marked resolved; rescue team returns to available status.', status: 'pending' },
-    { id: 15, title: 'Quantum QUBO Pre-Positioning', desc: 'QAOA parameterized circuit computes optimal resource allocation across sectors.', status: 'pending' },
-    { id: 16, title: 'Quantum Evacuation Optimization', desc: 'Capacity-constrained QUBO distributes flood zone population without overflow.', status: 'pending' },
+    { id: 15, title: 'Dynamic Priority Queue Pre-Positioning', desc: 'A* graph cost traversal computes optimal resource allocation across sectors.', status: 'pending' },
+    { id: 16, title: 'Dynamic Evacuation Route Optimization', desc: 'Capacity-constrained routing graph distributes flood zone population without overflow.', status: 'pending' },
     { id: 17, title: 'AI Audit Trail Generation', desc: 'Immutable multi-step execution logs persisted in database for public audit.', status: 'pending' },
     { id: 18, title: 'Inter-Agency Synchronized Broadcast', desc: 'SSE stream publishes state delta to all emergency portals simultaneously.', status: 'pending' },
     { id: 19, title: 'Archival to Resolved Operations', desc: 'Mission performance metrics, response duration, and audit logs logged.', status: 'pending' },
@@ -182,17 +182,17 @@ export const EndToEndSimulationModal: React.FC<EndToEndSimulationModalProps> = (
       await api.updateMissionStatus(createdRequestId, 'completed');
       updateStep(13, 'completed', 'SOS request marked COMPLETED; rescue resources freed');
 
-      // Step 15: Quantum Pre-Positioning
+      // Step 15: Dynamic Resource Pre-Positioning
       updateStep(14, 'running');
       await new Promise((r) => setTimeout(r, 600));
-      const qaoaRes = await api.optimizeResources(1.5, 0.8);
-      updateStep(14, 'completed', `QAOA solved (${qaoaRes.allocations.length} allocations, ${qaoaRes.gap_or_improvement_pct}% gain)`);
+      const resAlloc = await api.optimizeResources(1.5, 0.8);
+      updateStep(14, 'completed', `Dispatch solved (${resAlloc.allocations.length} allocations, +${resAlloc.gap_or_improvement_pct}% gain)`);
 
-      // Step 16: Quantum Evacuation
+      // Step 16: Dynamic Evacuation Route Optimization
       updateStep(15, 'running');
       await new Promise((r) => setTimeout(r, 600));
       const evacRes = await api.optimizeEvacuation();
-      updateStep(15, 'completed', `Evac QUBO completed: ${evacRes.total_evacuees} citizens safely assigned`);
+      updateStep(15, 'completed', `Evac routing completed: ${evacRes.total_evacuees} citizens safely routed`);
 
       // Step 17: AI Audit Trail
       updateStep(16, 'running');
@@ -235,7 +235,7 @@ export const EndToEndSimulationModal: React.FC<EndToEndSimulationModalProps> = (
                 ResQNova End-to-End 19-Step Lifecycle Verification
               </h3>
               <p className="text-xs text-slate-400">
-                Executes all real API routes, AI triage, GIS updates, resource dispatch & quantum solvers.
+                Executes all real API routes, AI triage, GIS updates, resource dispatch & dynamic routing solvers.
               </p>
             </div>
           </div>

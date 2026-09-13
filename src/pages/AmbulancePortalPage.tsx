@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useResQNova } from '../context/ResQNovaContext';
 import { TacticalMap } from '../components/TacticalMap';
 import { StatusBadge } from '../components/StatusBadge';
+import { getAStarRoute } from '../lib/api';
 import {
   HeartPulse,
   Navigation,
@@ -22,6 +23,17 @@ import {
   MapPin,
   Anchor,
 } from 'lucide-react';
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
 
 export const AmbulancePortalPage: React.FC = () => {
   const {
@@ -72,6 +84,108 @@ export const AmbulancePortalPage: React.FC = () => {
       ) || []
     );
   }, [state?.citizen_requests, currentMission?.id]);
+
+  // Target trauma center: prioritized nearest hospital with open ICU beds (icu_beds > 0)
+  const targetHospital = useMemo(() => {
+    if (!state?.hospitals || state.hospitals.length === 0) return null;
+    const icuHospitals = state.hospitals.filter((h) => h.icu_beds > 0);
+    const pool = icuHospitals.length > 0 ? icuHospitals : state.hospitals;
+    if (!currentMission) return pool[0];
+    return [...pool].sort(
+      (a, b) =>
+        haversineKm(currentMission.latitude, currentMission.longitude, a.latitude, a.longitude) -
+        haversineKm(currentMission.latitude, currentMission.longitude, b.latitude, b.longitude)
+    )[0];
+  }, [state?.hospitals, currentMission?.latitude, currentMission?.longitude]);
+
+  // Two-phase Green Corridor Routing State
+  const [pickupRoute, setPickupRoute] = useState<[number, number][] | undefined>(undefined);
+  const [corridorRoute, setCorridorRoute] = useState<[number, number][] | undefined>(undefined);
+  const [pickupEta, setPickupEta] = useState<number | null>(null);
+  const [corridorEta, setCorridorEta] = useState<number | null>(null);
+  const [pickupDist, setPickupDist] = useState<number | null>(null);
+  const [corridorDist, setCorridorDist] = useState<number | null>(null);
+  const [routeBlocked, setRouteBlocked] = useState<boolean>(false);
+  const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!amb || !currentMission) {
+      setPickupRoute(undefined);
+      setCorridorRoute(undefined);
+      setPickupEta(null);
+      setCorridorEta(null);
+      setPickupDist(null);
+      setCorridorDist(null);
+      setRouteBlocked(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingRoutes(true);
+
+    // Leg 1: Ambulance to Patient Rendezvous
+    const leg1Promise = getAStarRoute(amb.latitude, amb.longitude, currentMission.latitude, currentMission.longitude);
+
+    // Leg 2: Patient Rendezvous to Trauma Hospital
+    const leg2Promise = targetHospital
+      ? getAStarRoute(currentMission.latitude, currentMission.longitude, targetHospital.latitude, targetHospital.longitude)
+      : Promise.resolve(null);
+
+    Promise.all([leg1Promise, leg2Promise])
+      .then(([leg1, leg2]) => {
+        if (!isMounted) return;
+
+        let blocked = false;
+
+        if (leg1 && leg1.success && leg1.coordinates && leg1.coordinates.length > 0 && leg1.is_safe !== false) {
+          setPickupRoute(leg1.coordinates);
+          setPickupEta(leg1.duration_min);
+          setPickupDist(leg1.distance_km);
+        } else {
+          setPickupRoute(undefined);
+          setPickupEta(null);
+          setPickupDist(null);
+          blocked = true;
+        }
+
+        if (leg2 && leg2.success && leg2.coordinates && leg2.coordinates.length > 0 && leg2.is_safe !== false) {
+          setCorridorRoute(leg2.coordinates);
+          setCorridorEta(leg2.duration_min);
+          setCorridorDist(leg2.distance_km);
+        } else if (targetHospital) {
+          setCorridorRoute(undefined);
+          setCorridorEta(null);
+          setCorridorDist(null);
+          blocked = true;
+        }
+
+        setRouteBlocked(blocked);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setPickupRoute(undefined);
+        setCorridorRoute(undefined);
+        setRouteBlocked(true);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingRoutes(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    amb?.id,
+    amb?.latitude,
+    amb?.longitude,
+    currentMission?.id,
+    currentMission?.latitude,
+    currentMission?.longitude,
+    targetHospital?.id,
+    targetHospital?.latitude,
+    targetHospital?.longitude,
+    state?.roads,
+  ]);
 
   const handleClaimSos = async (requestId: string) => {
     if (!amb) return;
@@ -384,10 +498,51 @@ export const AmbulancePortalPage: React.FC = () => {
           {/* Right 6 Cols: Tactical Navigation Map */}
           <div className="lg:col-span-6 space-y-4">
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Navigation className="h-4 w-4 text-orange-400" />
-                Green Corridor Navigation & Hospital Approach
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Navigation className="h-4 w-4 text-orange-400" />
+                  Green Corridor Navigation & Hospital Approach
+                </h3>
+                {loadingRoutes && (
+                  <span className="text-[11px] text-orange-400 animate-pulse">Calculating corridor...</span>
+                )}
+              </div>
+
+              {/* Corridor status alert */}
+              {routeBlocked && (
+                <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/80 text-red-200 text-xs flex items-center gap-2 shadow-sm">
+                  <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                  <span>
+                    <b>Route unavailable:</b> One or more arterial road segments on this corridor are flooded or blocked.
+                  </span>
+                </div>
+              )}
+
+              {/* Real Road Vector ETA HUD */}
+              {currentMission && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl bg-orange-950/40 border border-orange-500/40 text-orange-200">
+                    <div className="text-[10px] text-orange-400 uppercase font-bold flex items-center gap-1">
+                      <Navigation className="h-3 w-3" /> Leg 1: Ambulance to Patient
+                    </div>
+                    <div className="font-bold text-white mt-0.5">
+                      {pickupEta !== null ? `${pickupEta} mins (${pickupDist} km)` : 'Calculating / Blocked'}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200">
+                    <div className="text-[10px] text-emerald-400 uppercase font-bold flex items-center gap-1">
+                      <Hospital className="h-3 w-3" /> Leg 2: Green Corridor to ER
+                    </div>
+                    <div className="font-bold text-white mt-0.5 truncate" title={targetHospital?.hospital_name}>
+                      {targetHospital?.hospital_name || 'Hospital ER'}
+                    </div>
+                    <div className="text-[10px] text-emerald-300">
+                      {targetHospital?.icu_beds ?? 0} ICU beds • {corridorEta !== null ? `${corridorEta} mins (${corridorDist} km)` : 'Calculating'}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <TacticalMap
                 height="450px"
@@ -396,6 +551,8 @@ export const AmbulancePortalPage: React.FC = () => {
                     ? [currentMission.latitude, currentMission.longitude]
                     : [amb.latitude, amb.longitude]
                 }
+                routePolyline={currentMission?.ambulance_reached ? corridorRoute : pickupRoute}
+                alternativePolyline={currentMission?.ambulance_reached ? undefined : corridorRoute}
               />
             </div>
           </div>
@@ -428,6 +585,8 @@ export const AmbulancePortalPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {otherSosCalls.map((req) => {
               const assignedAmb = state?.ambulances.find((a) => a.id === req.ambulance_id);
+              const distKm = haversineKm(amb.latitude, amb.longitude, req.latitude, req.longitude);
+              const estEtaMin = Math.max(2, Math.round(distKm * 2.2 + 2));
               return (
                 <div
                   key={req.id}
@@ -452,6 +611,11 @@ export const AmbulancePortalPage: React.FC = () => {
                       <span className="text-red-400 font-medium">Urgency: {req.medical_urgency}</span>
                     </div>
 
+                    <div className="flex items-center gap-1.5 text-[11px] text-orange-400 font-medium bg-orange-950/30 p-1.5 rounded border border-orange-900/40">
+                      <Clock className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                      <span>Est. 108 ALS ETA: ~{estEtaMin} min ({distKm} km)</span>
+                    </div>
+
                     {req.ambulance_requested && (
                       <div className="text-[11px] text-orange-300 bg-orange-950/40 p-1.5 rounded border border-orange-900/50">
                         🚑 Rescue Squad requested ambulance for this casualty
@@ -469,7 +633,7 @@ export const AmbulancePortalPage: React.FC = () => {
                     onClick={() => handleClaimSos(req.id)}
                     className="w-full py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <span>Accept & Dispatch {amb.vehicle_code}</span>
+                    <span>Accept Medical Call & Dispatch {amb.vehicle_code}</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>

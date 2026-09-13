@@ -600,7 +600,7 @@ export function computeAiFloodPrediction(inputs: HydraulicInputs): AiFloodPredic
   }
 
   // -------------------------------------------------------------
-  // QUANTUM PRE-POSITIONING STAGING NODES (QUBO SOLUTION)
+  // STRATEGIC PRE-POSITIONING STAGING NODES (DYNAMIC ROUTING SOLUTION)
   // Adjusted for water elevation so they always remain on DRY ground!
   // -------------------------------------------------------------
   const quantumPoints: QuantumPrepositionPoint[] = [
@@ -608,8 +608,8 @@ export function computeAiFloodPrediction(inputs: HydraulicInputs): AiFloodPredic
       id: 'qubo-prep-1',
       title:
         tier === 'extreme'
-          ? 'Quantum Pre-Positioned Flotilla Apex (Varadhi High Viaduct)'
-          : 'Quantum Pre-Positioned Boat Squad Alpha (Krishna Jetty)',
+          ? 'Strategic Pre-Positioned Flotilla Apex (Varadhi High Viaduct)'
+          : 'Strategic Pre-Positioned Boat Squad Alpha (Krishna Jetty)',
       type: 'boat_squad',
       latitude: tier === 'extreme' ? 16.5005 : 16.5028,
       longitude: tier === 'extreme' ? 80.6385 : 80.6405,
@@ -624,7 +624,7 @@ export function computeAiFloodPrediction(inputs: HydraulicInputs): AiFloodPredic
     },
     {
       id: 'qubo-prep-2',
-      title: 'Quantum Pre-Positioned 108 ALS Ambulance (Varadhi South Ramp)',
+      title: 'Strategic Pre-Positioned 108 ALS Ambulance (Varadhi South Ramp)',
       type: 'ambulance_als',
       latitude: 16.4985,
       longitude: 80.636,
@@ -639,8 +639,8 @@ export function computeAiFloodPrediction(inputs: HydraulicInputs): AiFloodPredic
       id: 'qubo-prep-3',
       title:
         tier === 'extreme' || tier === 'high'
-          ? 'Quantum Pre-Positioned Relief Fortress (IGMC Stadium Upper Concourse)'
-          : 'Quantum Pre-Positioned High-Ground Relief Hub (IGMC)',
+          ? 'Strategic Pre-Positioned Relief Fortress (IGMC Stadium Upper Concourse)'
+          : 'Strategic Pre-Positioned High-Ground Relief Hub (IGMC)',
       type: 'relief_staging',
       latitude: 16.5085,
       longitude: 80.6425,
@@ -653,7 +653,7 @@ export function computeAiFloodPrediction(inputs: HydraulicInputs): AiFloodPredic
     },
     {
       id: 'qubo-prep-4',
-      title: 'Quantum Drone Aerial Telemetry Relay (Gandhi Hill Apex)',
+      title: 'Strategic Drone Aerial Telemetry Relay (Gandhi Hill Apex)',
       type: 'drone_relay',
       latitude: 16.516,
       longitude: 80.624,

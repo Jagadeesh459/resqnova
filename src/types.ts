@@ -181,7 +181,7 @@ export interface AIExecutionLog {
   created_at: string;
 }
 
-export interface QuantumResourceAllocation {
+export interface DynamicResourceAllocation {
   resource_id: string;
   resource_name: string;
   resource_type: 'rescue_boat' | 'ambulance' | 'evac_truck';
@@ -189,32 +189,23 @@ export interface QuantumResourceAllocation {
   assigned_zone_name: string;
   travel_distance_km: number;
   risk_mitigation_score: number;
+  route_coordinates?: [number, number][];
 }
+export type QuantumResourceAllocation = DynamicResourceAllocation;
 
-export interface QuantumOptimizationResult {
+export interface DynamicRoutingOptimizationResult {
   optimization_id: string;
   timestamp: string;
   method: string;
-  backend_engine?: 'qiskit_python' | 'pure_statevector_ts';
-  qiskit_version?: string;
-  num_qubits: number;
-  qubo_matrix_size: string;
-  optimal_parameters: {
-    gamma: number[];
-    beta: number[];
-    p_layers: number;
-  };
+  backend_engine?: string;
   objective_value: number;
   classical_baseline_value: number;
   gap_or_improvement_pct: number;
   constraints_satisfied: boolean;
-  allocations: QuantumResourceAllocation[];
+  allocations: DynamicResourceAllocation[];
   runtime_ms: number;
-  circuit_depth: number;
-  statevector_entropy: number;
-  pauli_ising_hamiltonian?: string[];
-  open_qasm?: string;
 }
+export type QuantumOptimizationResult = DynamicRoutingOptimizationResult;
 
 export interface EvacuationShelterAllocation {
   zone_id: string;
@@ -226,28 +217,56 @@ export interface EvacuationShelterAllocation {
   assigned_capacity_usage_pct: number;
   safe_route_distance_km: number;
   road_safety_index: number;
+  route_coordinates?: [number, number][];
 }
 
 export interface EvacuationOptimizationResult {
   optimization_id: string;
   timestamp: string;
   method: string;
-  backend_engine?: 'qiskit_python' | 'pure_statevector_ts';
-  qiskit_version?: string;
+  backend_engine?: string;
   total_evacuees: number;
   shelters_utilized: number;
-  capacity_overflow: number; // strictly 0 when valid
+  capacity_overflow: number;
   objective_value: number;
   classical_baseline_value: number;
-  quantum_gain_pct: number;
+  optimization_gain_pct: number;
+  quantum_gain_pct?: number;
   allocations: EvacuationShelterAllocation[];
   runtime_ms: number;
+}
+
+export interface AStarRouteResult {
+  success: boolean;
+  algorithm: 'A*';
+  distance_km: number;
+  duration_min: number;
+  is_safe: boolean;
+  coordinates: [number, number][];
+  warnings: string[];
+  latency_ms?: number;
+  error?: string;
+}
+
+export interface DStarReplanningResult {
+  success: boolean;
+  algorithm: 'D* Lite';
+  replanned: boolean;
+  recompute_latency_ms: number;
+  new_distance_km: number;
+  new_duration_min: number;
+  detour_reason: string;
+  coordinates: [number, number][];
+  error?: string;
 }
 
 export interface FloodImpactZone {
   id: string;
   name: string;
-  impact_level: 'Critical - Red Area' | 'Warning - Yellow Area' | 'red' | 'yellow';
+  zone_name?: string;
+  district?: string;
+  impact_level?: 'Critical - Red Area' | 'Warning - Yellow Area' | 'red' | 'yellow' | string;
+  risk_level?: 'Critical' | 'Severe' | 'Moderate' | 'Low' | string;
   severity_category?: 'red' | 'yellow';
   water_depth_m?: number;
   water_level_m?: number;
@@ -257,11 +276,12 @@ export interface FloodImpactZone {
   crest_arrival_eta?: string;
   flow_velocity_mps?: number;
   recommended_action?: string;
+  strategic_preposition_needed?: string;
   quantum_preposition_needed?: string;
   polygon: [number, number][];
 }
 
-export interface QuantumPrepositionPoint {
+export interface StrategicPrepositionPoint {
   id: string;
   type: 'boat' | 'ambulance' | 'shelter' | 'boat_squad' | 'ambulance_als' | 'relief_staging' | 'drone_relay';
   label?: string;
@@ -270,6 +290,7 @@ export interface QuantumPrepositionPoint {
   lng?: number;
   latitude?: number;
   longitude?: number;
+  priority_rank?: number;
   qubo_rank?: number;
   qubo_energy_delta?: number;
   dry_ground_elevation_m?: number;
@@ -278,6 +299,8 @@ export interface QuantumPrepositionPoint {
   elevation_m?: number;
   staging_reason: string;
 }
+
+export type QuantumPrepositionPoint = StrategicPrepositionPoint;
 
 export interface AiFloodPredictionResult {
   id: string;
@@ -298,15 +321,16 @@ export interface AiFloodPredictionResult {
   red_impact_zones?: FloodImpactZone[];
   yellow_impact_zones?: FloodImpactZone[];
   impact_zones?: FloodImpactZone[];
-  quantum_prepositioning?: {
+  strategic_prepositioning?: {
     title: string;
     boats_staged: number;
     ambulances_staged: number;
-    staging_points: QuantumPrepositionPoint[];
+    staging_points: StrategicPrepositionPoint[];
     optimization_gain_pct: number;
-    qubo_energy_state: number;
   };
-  quantum_prepositioning_points?: QuantumPrepositionPoint[];
+  quantum_prepositioning?: any;
+  strategic_prepositioning_points?: StrategicPrepositionPoint[];
+  quantum_prepositioning_points?: StrategicPrepositionPoint[];
   ai_synthesis_summary?: string;
 }
 

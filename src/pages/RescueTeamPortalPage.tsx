@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useResQNova } from '../context/ResQNovaContext';
 import { TacticalMap } from '../components/TacticalMap';
 import { StatusBadge } from '../components/StatusBadge';
+import { getAStarRoute } from '../lib/api';
 import {
   Radio,
   Navigation,
@@ -23,6 +24,17 @@ import {
   PlusCircle,
   MapPin,
 } from 'lucide-react';
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
 
 export const RescueTeamPortalPage: React.FC = () => {
   const {
@@ -77,6 +89,54 @@ export const RescueTeamPortalPage: React.FC = () => {
       ) || []
     );
   }, [state?.citizen_requests, currentMission?.id]);
+
+  // A* OSRM Road Geometry Navigation State
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][] | undefined>(undefined);
+  const [routeEtaMinutes, setRouteEtaMinutes] = useState<number | null>(null);
+  const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
+  const [isRouteUnavailable, setIsRouteUnavailable] = useState<boolean>(false);
+  const [routeLoading, setRouteLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!team || !currentMission) {
+      setRouteCoordinates(undefined);
+      setRouteEtaMinutes(null);
+      setRouteDistanceKm(null);
+      setIsRouteUnavailable(false);
+      return;
+    }
+
+    let isMounted = true;
+    setRouteLoading(true);
+
+    getAStarRoute(team.latitude, team.longitude, currentMission.latitude, currentMission.longitude)
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.success && res.coordinates && res.coordinates.length > 0 && res.is_safe !== false) {
+          setRouteCoordinates(res.coordinates);
+          setRouteEtaMinutes(res.duration_min);
+          setRouteDistanceKm(res.distance_km);
+          setIsRouteUnavailable(false);
+        } else {
+          setRouteCoordinates(undefined);
+          setRouteEtaMinutes(null);
+          setRouteDistanceKm(null);
+          setIsRouteUnavailable(true);
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setRouteCoordinates(undefined);
+        setIsRouteUnavailable(true);
+      })
+      .finally(() => {
+        if (isMounted) setRouteLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [team?.id, team?.latitude, team?.longitude, currentMission?.id, currentMission?.latitude, currentMission?.longitude, state?.roads]);
 
   const handleClaimSos = async (requestId: string) => {
     if (!team) return;
@@ -444,10 +504,37 @@ export const RescueTeamPortalPage: React.FC = () => {
           {/* Right 6 Cols: Tactical Navigation Map */}
           <div className="lg:col-span-6 space-y-4">
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Compass className="h-4 w-4 text-cyan-400" />
-                Live Flood Navigation & Sector Map
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Compass className="h-4 w-4 text-cyan-400" />
+                  A* Road Navigation & Live Incident Vector
+                </h3>
+                {routeLoading && (
+                  <span className="text-[11px] text-cyan-400 animate-pulse">Calculating route...</span>
+                )}
+              </div>
+
+              {/* Route status alerts */}
+              {isRouteUnavailable && (
+                <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/80 text-red-200 text-xs flex items-center gap-2 shadow-sm">
+                  <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                  <span>
+                    <b>Route unavailable:</b> Direct road corridors are currently flooded or impassable. Proceed with caution using waterborne rescue craft.
+                  </span>
+                </div>
+              )}
+
+              {!isRouteUnavailable && routeEtaMinutes !== null && (
+                <div className="p-2.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-200 text-xs flex items-center justify-between shadow-sm">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Navigation className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+                    OSRM Road Geometry Active ({routeDistanceKm} km)
+                  </span>
+                  <span className="font-bold text-cyan-300">
+                    A* ETA: {routeEtaMinutes} mins
+                  </span>
+                </div>
+              )}
 
               <TacticalMap
                 height="450px"
@@ -456,6 +543,7 @@ export const RescueTeamPortalPage: React.FC = () => {
                     ? [currentMission.latitude, currentMission.longitude]
                     : [team.latitude, team.longitude]
                 }
+                routePolyline={routeCoordinates}
               />
             </div>
           </div>
@@ -488,6 +576,8 @@ export const RescueTeamPortalPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {otherSosCalls.map((req) => {
               const assignedTeam = state?.rescue_teams.find((t) => t.id === req.rescue_team_id);
+              const distKm = haversineKm(team.latitude, team.longitude, req.latitude, req.longitude);
+              const estEtaMin = Math.max(3, Math.round(distKm * 2.8 + 2));
               return (
                 <div
                   key={req.id}
@@ -510,6 +600,11 @@ export const RescueTeamPortalPage: React.FC = () => {
                     <div className="flex items-center justify-between text-xs text-slate-300 pt-1">
                       <span>{req.people_count} Citizens trapped</span>
                       <span className="text-red-400 font-medium">{req.emergency_type}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[11px] text-cyan-400 font-medium bg-cyan-950/30 p-1.5 rounded border border-cyan-900/40">
+                      <Clock className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                      <span>Est. A* Priority Queue ETA: ~{estEtaMin} min ({distKm} km)</span>
                     </div>
 
                     {assignedTeam && (

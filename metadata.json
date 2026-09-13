@@ -1,6 +1,6 @@
 {
   "name": "ResQNova - Disaster Management Platform",
-  "description": "Integrated emergency command platform for Vijayawada/NTR District featuring AI triage, quantum optimization, and GIS digital twin.",
+  "description": "Integrated emergency command platform for Vijayawada/NTR District featuring AI triage, dynamic A*/D* Lite graph routing, and GIS digital twin.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

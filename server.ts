@@ -5,12 +5,12 @@ import dotenv from 'dotenv';
 import { db } from './server/db';
 import { runAiTriageAndDispatch } from './server/gemini';
 import {
-  solveResourcePrepositioningQUBO,
-  solveEvacuationPlanningQUBO,
-  explainQuantumCircuit,
-} from './server/quantum';
-import { runDisasterQuantumModule } from './server/quantumEngine';
-import { computeSafeRoute } from './server/routing';
+  runAStarRouting,
+  runDStarReplanning,
+  assignRescueTeamPriorityQueue,
+  assignAmbulanceGreenCorridor,
+  recommendSafeShelter,
+} from './server/routingEngine';
 
 dotenv.config();
 
@@ -74,6 +74,12 @@ app.get('/api/realtime/stream', (req, res) => {
     clearInterval(heartbeat);
     unsubscribe();
   });
+});
+
+app.post('/api/seed', (req, res) => {
+  db.seedInitialData();
+  db.broadcast();
+  res.json({ success: true, message: 'Database reset to initial scenario with rich samples' });
 });
 
 // ==========================================
@@ -367,70 +373,149 @@ app.post('/api/roads/update', (req, res) => {
 });
 
 // ==========================================
-// 5. QUANTUM OPTIMIZATION APIS
+// 5. DYNAMIC ROUTING ENGINE (A* & D* LITE) APIS
 // ==========================================
-app.post('/api/optimize/resource', async (req, res) => {
+app.post('/api/routing/astar', async (req, res) => {
   try {
-    const state = db.getState();
-    const result = await solveResourcePrepositioningQUBO({
-      zones: state.risk_zones,
-      rescueTeams: state.rescue_teams,
-      ambulances: state.ambulances,
-      riskWeight: req.body.riskWeight,
-      travelWeight: req.body.travelWeight,
+    const { start_lat, start_lng, end_lat, end_lng, mode } = req.body;
+    if (!start_lat || !start_lng || !end_lat || !end_lng) {
+      return res.status(400).json({ error: 'start_lat, start_lng, end_lat, end_lng are required' });
+    }
+
+    const route = await runAStarRouting({
+      start_lat: Number(start_lat),
+      start_lng: Number(start_lng),
+      end_lat: Number(end_lat),
+      end_lng: Number(end_lng),
+      mode,
     });
-    res.json(result);
+    res.json(route);
   } catch (err) {
-    console.error('Resource optimization error:', err);
+    console.error('A* routing error:', err);
     res.status(500).json({ error: String(err) });
   }
 });
 
-app.post('/api/optimize/evacuation', async (req, res) => {
+app.post('/api/routing/dstar', async (req, res) => {
   try {
-    const state = db.getState();
-    const result = await solveEvacuationPlanningQUBO({
-      zones: state.risk_zones,
-      shelters: state.shelters,
-      populations: req.body.populations,
-      vulnerableRatios: req.body.vulnerableRatios,
+    const { mission_id, current_lat, current_lng, goal_lat, goal_lng, blocked_road_ids } = req.body;
+    if (!current_lat || !current_lng || !goal_lat || !goal_lng) {
+      return res.status(400).json({ error: 'current_lat, current_lng, goal_lat, goal_lng are required' });
+    }
+
+    const route = await runDStarReplanning({
+      mission_id,
+      current_lat: Number(current_lat),
+      current_lng: Number(current_lng),
+      goal_lat: Number(goal_lat),
+      goal_lng: Number(goal_lng),
+      blocked_road_ids: Array.isArray(blocked_road_ids) ? blocked_road_ids : [],
     });
-    res.json(result);
+    res.json(route);
   } catch (err) {
-    console.error('Evacuation optimization error:', err);
+    console.error('D* Lite replanning error:', err);
     res.status(500).json({ error: String(err) });
   }
 });
 
-app.get('/api/quantum/explain', async (req, res) => {
+app.post('/api/routing/rescue', async (req, res) => {
   try {
-    const explanation = await explainQuantumCircuit();
-    res.json(explanation);
+    const { requestId } = req.body;
+    const state = db.getState();
+    const request = requestId
+      ? db.getCitizenRequest(requestId)
+      : state.citizen_requests.find((r) => r.status === 'pending');
+
+    if (!request) {
+      return res.status(404).json({ error: 'No active SOS request found' });
+    }
+
+    const availableTeams = state.rescue_teams.filter((t) => t.status === 'available');
+    const result = await assignRescueTeamPriorityQueue(request, availableTeams);
+    if (!result) {
+      return res.status(404).json({ error: 'No available rescue teams for dispatch' });
+    }
+
+    res.json({
+      success: true,
+      request_id: request.request_id,
+      assigned_team: result.assignedTeam,
+      eta_minutes: result.etaMinutes,
+      route: result.route,
+    });
   } catch (err) {
-    console.error('Quantum explanation error:', err);
+    console.error('Rescue priority dispatch error:', err);
     res.status(500).json({ error: String(err) });
   }
 });
 
-app.get('/api/quantum/engine-info', (req, res) => {
+app.post('/api/routing/ambulance', async (req, res) => {
+  try {
+    const { patient_lat, patient_lng } = req.body;
+    const state = db.getState();
+    const pLat = patient_lat ? Number(patient_lat) : 16.5038;
+    const pLng = patient_lng ? Number(patient_lng) : 80.6432;
+
+    const result = await assignAmbulanceGreenCorridor(pLat, pLng, state.ambulances, state.hospitals);
+    if (!result) {
+      return res.status(404).json({ error: 'No ambulance or hospital capacity available' });
+    }
+
+    res.json({
+      success: true,
+      ambulance: result.selectedAmbulance,
+      hospital: result.selectedHospital,
+      pickup_route: result.patientPickupRoute,
+      corridor_route: result.hospitalCorridorRoute,
+    });
+  } catch (err) {
+    console.error('Ambulance green corridor error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/routing/shelter', async (req, res) => {
+  try {
+    const { citizen_lat, citizen_lng } = req.body;
+    const state = db.getState();
+    const cLat = citizen_lat ? Number(citizen_lat) : 16.5038;
+    const cLng = citizen_lng ? Number(citizen_lng) : 80.6432;
+
+    const result = await recommendSafeShelter(cLat, cLng, state.shelters);
+    if (!result) {
+      return res.status(404).json({ error: 'No relief shelter available' });
+    }
+
+    res.json({
+      success: true,
+      shelter: result.bestShelter,
+      score: result.score,
+      route: result.route,
+    });
+  } catch (err) {
+    console.error('Shelter routing error:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/routing/engine-info', (req, res) => {
   res.json({
     status: 'ready',
-    primary_engine: 'Qiskit 2.5.2 (Python 3.12 QAOA / QUBO)',
-    fallback_engine: 'Pure TypeScript Statevector Engine',
-    capabilities: [
-      'QAOA p=2 Variational Ansatz',
-      'QUBO QuadraticProgram modeling',
-      'COBYLA parameter optimization',
-      'StatevectorSampler probability decoding',
-      'OpenQASM 2.0 export',
-      'Ising Pauli Hamiltonian transformation',
-      'NumPy exact eigensolver benchmark baseline',
+    primary_engine: 'Dynamic Graph Routing (A* + D* Lite)',
+    target_region: 'Vijayawada / NTR District Urban Flood Mesh',
+    algorithms: [
+      'A* Admissible Haversine Heuristic (Sub-5ms Initial Corridor)',
+      'D* Lite Incremental Dynamic Replanner (Koenig & Likhachev)',
+      'Shortest-ETA Priority Queue Rescue Assignment',
+      'Emergency 108 Green Corridor Multi-Objective Routing',
+      'Capacity & Exposure-Weighted Safe Shelter Allocation',
+      'OSRM Real Road Geometry Integration',
     ],
   });
 });
 
 // ==========================================
-// 6. SAFE ROUTING API
+// 6. SAFE ROUTING API (UNIFIED ROAD GEOMETRY)
 // ==========================================
 app.post('/api/route', async (req, res) => {
   try {
@@ -439,14 +524,23 @@ app.post('/api/route', async (req, res) => {
       return res.status(400).json({ error: 'startLat, startLng, endLat, endLng are required' });
     }
 
-    const route = await computeSafeRoute({
-      startLat: Number(startLat),
-      startLng: Number(startLng),
-      endLat: Number(endLat),
-      endLng: Number(endLng),
+    const astarResult = await runAStarRouting({
+      start_lat: Number(startLat),
+      start_lng: Number(startLng),
+      end_lat: Number(endLat),
+      end_lng: Number(endLng),
       mode,
     });
-    res.json(route);
+
+    res.json({
+      coordinates: astarResult.coordinates,
+      distanceKm: astarResult.distance_km,
+      durationMinutes: astarResult.duration_min,
+      isSafe: astarResult.is_safe,
+      warnings: astarResult.warnings,
+      alternativeUsed: astarResult.warnings.length > 0,
+      provider: 'Dynamic Graph Routing (A* + OSRM)',
+    });
   } catch (err) {
     console.error('Route calculation error:', err);
     res.status(500).json({ error: String(err) });
@@ -472,7 +566,7 @@ async function start() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[ResQNova] Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[ResQNova] Server running on http://localhost:${PORT}`);
   });
 }
 

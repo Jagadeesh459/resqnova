@@ -56,7 +56,7 @@ export const EvacuationPlannerPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold text-white tracking-tight">
-                Quantum Mass Evacuation Planner (Capacity-Constrained QUBO)
+                Dynamic Mass Evacuation Planner (Capacity-Constrained Graph Routing)
               </h2>
               <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                 Strict Zero-Overflow
@@ -69,10 +69,10 @@ export const EvacuationPlannerPage: React.FC = () => {
         </div>
 
         <button
-          id="btn-run-evac-qaoa"
+          id="btn-run-evac-optimizer"
           onClick={handleRunEvacuation}
           disabled={solving}
-          className={`px-4 py-2 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-2 transition-all cursor-pointer ${
             solving
               ? 'bg-slate-700 cursor-not-allowed'
               : 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/40 hover:scale-[1.01]'
@@ -80,11 +80,11 @@ export const EvacuationPlannerPage: React.FC = () => {
         >
           {solving ? (
             <>
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Solving Capacity QUBO...
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Solving Capacity Routing Graph...
             </>
           ) : (
             <>
-              <ShieldCheck className="h-3.5 w-3.5" /> Solve Evacuation QUBO via QAOA
+              <ShieldCheck className="h-3.5 w-3.5" /> Solve Evacuation Route Allocation
             </>
           )}
         </button>
@@ -169,14 +169,8 @@ export const EvacuationPlannerPage: React.FC = () => {
                 <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
                   Optimization Performance
                 </h4>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                  result.backend_engine === 'qiskit_python'
-                    ? 'bg-purple-950/60 text-purple-300 border-purple-500/50'
-                    : 'bg-cyan-950/60 text-cyan-300 border-cyan-500/50'
-                }`}>
-                  {result.backend_engine === 'qiskit_python'
-                    ? `⚡ Qiskit ${result.qiskit_version || '2.5.2'} (Python QAOA)`
-                    : '🔬 Pure TS Statevector'}
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-purple-950/60 text-purple-300 border-purple-500/50">
+                  {result.backend_engine || 'Dynamic Graph Routing Engine'}
                 </span>
               </div>
 
@@ -201,8 +195,8 @@ export const EvacuationPlannerPage: React.FC = () => {
 
               <div className="p-2.5 rounded bg-purple-950/20 border border-purple-500/30 text-[11px]">
                 <div className="flex items-center justify-between font-bold text-purple-300">
-                  <span>QAOA Optimization Gain</span>
-                  <span>+{result.quantum_gain_pct}% Efficiency</span>
+                  <span>Routing Optimization Gain</span>
+                  <span>+{result.optimization_gain_pct || result.quantum_gain_pct}% Efficiency</span>
                 </div>
               </div>
             </div>
@@ -276,8 +270,8 @@ export const EvacuationPlannerPage: React.FC = () => {
               </div>
               <h4 className="text-base font-bold text-white">Evacuation Solver Ready</h4>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Adjust the population influx sliders on the left and click "Solve Evacuation QUBO via QAOA" to
-                compute the shelter allocation schedule.
+                Adjust the population influx sliders on the left and click "Solve Evacuation Route Allocation" to
+                compute the capacity-constrained multi-objective evacuation corridor schedule.
               </p>
             </div>
           )}

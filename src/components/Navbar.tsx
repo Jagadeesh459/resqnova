@@ -21,6 +21,7 @@ import {
   ExternalLink,
   SlidersHorizontal,
   Brain,
+  Route,
 } from 'lucide-react';
 import { useResQNova } from '../context/ResQNovaContext';
 import { LoginModal } from './LoginModal';
@@ -142,15 +143,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSimulationModal }) => {
     },
     admin: {
       modeLabel: 'Incident Command Mode',
-      modeDescription: 'District Collectorate command, QUBO allocation & AI flood diagnostics',
+      modeDescription: 'District Collectorate command, dynamic graph routing & AI flood diagnostics',
       modeBadgeClass: 'bg-red-500/15 text-red-300 border-red-500/30',
       landingPath: '/dashboard',
       links: [
         { path: '/dashboard', label: 'Command Dashboard', icon: ShieldAlert, badge: activeSosCount > 0 ? activeSosCount : undefined, hint: 'Unified citywide tactical GIS command' },
-        { path: '/ai-flood-predictor', label: 'AI Flood Predictor', icon: Brain, hint: 'Train AI models on datasets & quantum impact staging' },
-        { path: '/resource-planner', label: 'Quantum Pre-Position', icon: Cpu, hint: 'QAOA & QUBO mathematical staging' },
+        { path: '/ai-flood-predictor', label: 'AI Flood Predictor', icon: Brain, hint: 'Train AI models on datasets & impact staging' },
+        { path: '/resource-planner', label: 'Resource Planner', icon: Cpu, hint: 'Priority queue & dynamic graph staging' },
         { path: '/evacuation-planner', label: 'Evac Planner', icon: MapPin, hint: 'Dynamic flood road closures & high ground' },
-        { path: '/quantum-vs-classical', label: 'Quantum vs Classical', icon: Scale, hint: 'Statistical benchmarks & dynamic charts' },
+        { path: '/routing-operations', label: 'Routing Operations', icon: Route, hint: 'A* & D* Lite dynamic graph replanning' },
         { path: '/admin/ai-diagnostics', label: 'AI Diagnostics', icon: Zap, hint: 'Gemini multi-modal flood triage' },
         { path: '/resolved-operations', label: 'Resolved History', icon: CheckCircle2, hint: 'Citywide audit log of completed missions' },
       ],

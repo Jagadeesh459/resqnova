@@ -5,169 +5,82 @@ import {
   Layers,
   Eye,
   EyeOff,
-  Mountain,
-  Map as MapIcon,
-  Cpu,
-  Zap,
-  ArrowRight,
-  Info,
-  X,
   Compass,
   AlertTriangle,
+  Route,
+  Activity,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
+import { DynamicRoutingModal } from './DynamicRoutingModal';
 
 interface TacticalMapProps {
   height?: string;
   focusCoords?: [number, number];
   routePolyline?: [number, number][];
+  alternativePolyline?: [number, number][];
   onSelectRequest?: (id: string) => void;
   className?: string;
+  showDynamicCorridorsDefault?: boolean;
   showQuantumDispatchDefault?: boolean;
   showQuantumEvacDefault?: boolean;
   minimalCitizenMode?: boolean;
-  citizenSource?: { lat: number; lng: number; label: string; address?: string };
+  sosActive?: boolean;
+  citizenSource?: { lat: number; lng: number; label: string; address?: string; isSosActive?: boolean };
   citizenDestination?: { lat: number; lng: number; label: string; availableBeds?: number; address?: string };
   bypassWarning?: string;
 }
 
 type MapTileStyle = 'tf-transport' | 'tf-outdoors' | 'tf-landscape' | 'carto-dark' | 'carto-voyager';
 
-// Real road network coordinates across Vijayawada for Quantum corridors
-const QUANTUM_DISPATCH_ROAD_ROUTES: {
-  id: string;
-  title: string;
-  squad: string;
-  target: string;
-  algorithm: string;
-  energy: string;
-  distanceKm: number;
-  durationMins: number;
-  roadCoords: [number, number][];
-}[] = [
-  {
-    id: 'qaoa-disp-1',
-    title: 'QAOA Dispatch Vector: NDRF Team Alpha ➔ Krishna Lanka East',
-    squad: 'NDRF Boat Squad Alpha',
-    target: 'Krishna Lanka Sub-station (4 Victims Trapped)',
-    algorithm: 'QAOA Parameterized Variational Circuit (p=2, 14 Qubits)',
-    energy: 'HC Cost Minimized: E = -14.82, Approximation Ratio: 96.4%',
-    distanceKm: 4.8,
-    durationMins: 11,
-    roadCoords: [
-      [16.518, 80.608],
-      [16.5195, 80.614],
-      [16.5208, 80.621],
-      [16.5175, 80.628],
-      [16.5145, 80.6325],
-      [16.511, 80.636],
-      [16.5075, 80.639],
-      [16.505, 80.6415],
-      [16.5038, 80.6432],
-    ],
-  },
-  {
-    id: 'qaoa-disp-2',
-    title: 'QAOA Dispatch Vector: 108 Trauma Unit ➔ Governorpet Arterial SOS',
-    squad: '108 ALS Ambulance AP-16-TX-1008',
-    target: 'Governorpet Complex (Cardiac & Pediatric Trauma)',
-    algorithm: 'QAOA Multi-Resource Combinatorial Matching',
-    energy: 'Travel Latency & Hospital Proximity Multi-Objective Ground State',
-    distanceKm: 3.2,
-    durationMins: 7,
-    roadCoords: [
-      [16.518, 80.655],
-      [16.514, 80.652],
-      [16.509, 80.648],
-      [16.511, 80.642],
-      [16.5135, 80.636],
-      [16.5145, 80.6325],
-    ],
-  },
-  {
-    id: 'qaoa-disp-3',
-    title: 'QAOA Dispatch Vector: SDRF Team Charlie ➔ Ramavarappadu Basin',
-    squad: 'SDRF Inflatable Zodiac Charlie',
-    target: 'Ramavarappadu Ring Road (Elderly Evacuation)',
-    algorithm: 'Quantum Superposition Statevector Search',
-    energy: 'Zero Hazard Zone Collision Invariant',
-    distanceKm: 3.6,
-    durationMins: 9,
-    roadCoords: [
-      [16.524, 80.631],
-      [16.522, 80.639],
-      [16.5195, 80.648],
-      [16.518, 80.655],
-      [16.517, 80.662],
-    ],
-  },
-];
+// In-memory cache for OSRM road geometry
+const roadGeometryCache = new Map<string, [number, number][]>();
 
-const QUANTUM_EVACUATION_CORRIDORS: {
-  id: string;
-  title: string;
-  origin: string;
-  shelter: string;
-  evacueeCount: number;
-  capacityHeadroom: number;
-  algorithm: string;
-  roadCoords: [number, number][];
-}[] = [
-  {
-    id: 'qubo-evac-1',
-    title: 'QUBO Evacuation Corridor: Krishna Lanka ➔ IGMC Stadium Relief Center',
-    origin: 'Krishna Lanka Riverbank (Water Level +3.4m)',
-    shelter: 'Indira Gandhi Municipal Stadium (Capacity: 450, Food: Abundant)',
-    evacueeCount: 480,
-    capacityHeadroom: 100,
-    algorithm: 'Capacity-Constrained QUBO (Strict Zero Overflow Constraint)',
-    roadCoords: [
-      [16.5038, 80.6432],
-      [16.5055, 80.642],
-      [16.507, 80.641],
-      [16.508, 80.642],
-    ],
-  },
-  {
-    id: 'qubo-evac-2',
-    title: 'QUBO Evacuation Corridor: Bhavanipuram ➔ Bishop Grassi High School',
-    origin: 'Bhavanipuram Low Catchment (Water Level +2.8m)',
-    shelter: 'Bishop Grassi High School (Capacity: 350, Medical: Full)',
-    evacueeCount: 320,
-    capacityHeadroom: 130,
-    algorithm: 'QUBO Combinatorial Knapsack Multi-Bin Allocation',
-    roadCoords: [
-      [16.521, 80.608],
-      [16.519, 80.615],
-      [16.517, 80.622],
-      [16.514, 80.629],
-    ],
-  },
-  {
-    id: 'qubo-evac-3',
-    title: 'QUBO Evacuation Corridor: Ramavarappadu ➔ SRR & CVR Govt College',
-    origin: 'Ramavarappadu Inundation Pocket',
-    shelter: 'SRR & CVR Govt Degree College (Capacity: 300, Power: Generator Backup)',
-    evacueeCount: 250,
-    capacityHeadroom: 90,
-    algorithm: 'QUBO Energy Minimization via Quantum Tunneling',
-    roadCoords: [
-      [16.517, 80.662],
-      [16.518, 80.654],
-      [16.519, 80.646],
-      [16.519, 80.638],
-    ],
-  },
-];
+async function getRoadGeometry(
+  road: { id: string; start_lat?: number; start_lng?: number; end_lat?: number; end_lng?: number },
+  signal: AbortSignal
+): Promise<{ id: string; geometry: [number, number][] } | null> {
+  if (road.start_lat == null || road.start_lng == null || road.end_lat == null || road.end_lng == null) {
+    return null;
+  }
+  const key = `${road.start_lat},${road.start_lng}:${road.end_lat},${road.end_lng}`;
+  const cached = roadGeometryCache.get(key);
+  if (cached) return { id: road.id, geometry: cached };
+
+  const baseUrl =
+    (typeof import.meta !== 'undefined' &&
+      ((import.meta as any).env?.NEXT_PUBLIC_OSRM_URL || (import.meta as any).env?.VITE_OSRM_URL)) ||
+    'https://router.project-osrm.org';
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/route/v1/driving/${road.start_lng},${road.start_lat};${road.end_lng},${road.end_lat}?overview=full&geometries=geojson`,
+      { signal }
+    );
+    if (!response.ok) return null;
+    const payload: any = await response.json();
+    const coordinates = payload.routes?.[0]?.geometry?.coordinates;
+    if (!coordinates || coordinates.length < 2) return null;
+
+    // Convert GeoJSON [lng, lat] to Leaflet [lat, lng]
+    const geometry: [number, number][] = coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
+    roadGeometryCache.set(key, geometry);
+    return { id: road.id, geometry };
+  } catch {
+    return null;
+  }
+}
 
 export const TacticalMap: React.FC<TacticalMapProps> = ({
   height = '480px',
   focusCoords,
   routePolyline,
+  alternativePolyline,
   onSelectRequest,
   className = '',
-  showQuantumDispatchDefault = true,
-  showQuantumEvacDefault = true,
+  showDynamicCorridorsDefault = true,
   minimalCitizenMode = false,
+  sosActive = false,
   citizenSource,
   citizenDestination,
   bypassWarning,
@@ -183,6 +96,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     '7d071cff43f04a768bc32368bce332cd';
 
   const [activeTileStyle, setActiveTileStyle] = useState<MapTileStyle>('tf-transport');
+  const [roadGeometries, setRoadGeometries] = useState<Record<string, [number, number][]>>({});
 
   // Layer groups refs
   const layerGroupsRef = useRef<{
@@ -194,10 +108,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     roads: L.LayerGroup;
     riskZones: L.LayerGroup;
     aiFloodZones: L.LayerGroup;
-    quantumPreposition: L.LayerGroup;
+    strategicStaging: L.LayerGroup;
     route: L.LayerGroup;
-    quantumDispatch: L.LayerGroup;
-    quantumEvac: L.LayerGroup;
+    alternativeRoute: L.LayerGroup;
+    dynamicCorridors: L.LayerGroup;
   } | null>(null);
 
   // Layer visibility toggles
@@ -210,15 +124,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     roads: true,
     riskZones: true,
     aiFloodZones: true,
-    quantumPreposition: true,
-    quantumDispatch: showQuantumDispatchDefault,
-    quantumEvac: showQuantumEvacDefault,
+    strategicStaging: true,
+    dynamicCorridors: showDynamicCorridorsDefault,
   });
 
   const [showLayerPanel, setShowLayerPanel] = useState(false);
-  const [showQuantumModal, setShowQuantumModal] = useState(false);
+  const [showRoutingModal, setShowRoutingModal] = useState(false);
 
-  // Function to create base tile layer according to style
+  // Create base tile layer according to style
   const createBaseLayer = (style: MapTileStyle): L.TileLayer => {
     if (thunderforestApiKey && style.startsWith('tf-')) {
       const tfName = style.replace('tf-', '');
@@ -266,11 +179,36 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     baseTileLayerRef.current = newLayer;
   }, [activeTileStyle]);
 
+  // Fetch real road geometries from OSRM
+  useEffect(() => {
+    if (!state?.roads) return;
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    Promise.all(
+      state.roads.map((road) => getRoadGeometry(road, controller.signal).catch(() => null))
+    ).then((results) => {
+      if (!isMounted) return;
+      const geomMap: Record<string, [number, number][]> = {};
+      results.forEach((res) => {
+        if (res && res.geometry) {
+          geomMap[res.id] = res.geometry;
+        }
+      });
+      setRoadGeometries(geomMap);
+    });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [state?.roads]);
+
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Centered on Vijayawada, Andhra Pradesh (Prakasam Barrage & NTR City Center)
     const map = L.map(mapContainerRef.current, {
       center: [16.5062, 80.648],
       zoom: 13,
@@ -279,12 +217,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Initial base layer (Thunderforest Transport)
     const initialBaseLayer = createBaseLayer('tf-transport');
     initialBaseLayer.addTo(map);
     baseTileLayerRef.current = initialBaseLayer;
 
-    // Create layer groups
+    // Layer groups
     const sosGroup = L.layerGroup().addTo(map);
     const rescueGroup = L.layerGroup().addTo(map);
     const ambulancesGroup = L.layerGroup().addTo(map);
@@ -293,10 +230,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const roadsGroup = L.layerGroup().addTo(map);
     const riskZonesGroup = L.layerGroup().addTo(map);
     const aiFloodZonesGroup = L.layerGroup().addTo(map);
-    const quantumPrepositionGroup = L.layerGroup().addTo(map);
+    const strategicStagingGroup = L.layerGroup().addTo(map);
     const routeGroup = L.layerGroup().addTo(map);
-    const quantumDispatchGroup = L.layerGroup().addTo(map);
-    const quantumEvacGroup = L.layerGroup().addTo(map);
+    const alternativeRouteGroup = L.layerGroup().addTo(map);
+    const dynamicCorridorsGroup = L.layerGroup().addTo(map);
 
     layerGroupsRef.current = {
       sos: sosGroup,
@@ -307,10 +244,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       roads: roadsGroup,
       riskZones: riskZonesGroup,
       aiFloodZones: aiFloodZonesGroup,
-      quantumPreposition: quantumPrepositionGroup,
+      strategicStaging: strategicStagingGroup,
       route: routeGroup,
-      quantumDispatch: quantumDispatchGroup,
-      quantumEvac: quantumEvacGroup,
+      alternativeRoute: alternativeRouteGroup,
+      dynamicCorridors: dynamicCorridorsGroup,
     };
 
     mapInstanceRef.current = map;
@@ -334,13 +271,12 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       roads,
       riskZones,
       aiFloodZones,
-      quantumPreposition,
+      strategicStaging,
       route,
-      quantumDispatch,
-      quantumEvac,
+      alternativeRoute,
+      dynamicCorridors,
     } = layerGroupsRef.current;
 
-    // Clear existing dynamic markers
     sos.clearLayers();
     rescue.clearLayers();
     ambulances.clearLayers();
@@ -349,18 +285,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     roads.clearLayers();
     riskZones.clearLayers();
     aiFloodZones.clearLayers();
-    quantumPreposition.clearLayers();
+    strategicStaging.clearLayers();
     route.clearLayers();
-    quantumDispatch.clearLayers();
-    quantumEvac.clearLayers();
+    alternativeRoute.clearLayers();
+    dynamicCorridors.clearLayers();
 
     // -------------------------------------------------------------
-    // CITIZEN MODE: EXCLUSIVE FOCUS ON SOURCE, DESTINATION & SAFE PATH
+    // CITIZEN MODE: SOURCE, DESTINATION & VERIFIED SAFE PATH
     // -------------------------------------------------------------
     if (minimalCitizenMode) {
       const boundsCoords: [number, number][] = [];
 
-      // 1. Citizen Source Pin (Distress Beacon)
       if (citizenSource) {
         boundsCoords.push([citizenSource.lat, citizenSource.lng]);
         const sourceIcon = L.divIcon({
@@ -380,9 +315,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         const sourceMarker = L.marker([citizenSource.lat, citizenSource.lng], { icon: sourceIcon });
         sourceMarker.bindPopup(`
           <div class="p-2 text-slate-900 text-xs font-sans min-w-[200px]">
-            <div class="font-bold text-sm text-red-600 flex items-center gap-1">
-              <span>📍 YOUR DISTRESS LOCATION</span>
-            </div>
+            <div class="font-bold text-sm text-red-600">📍 YOUR DISTRESS LOCATION</div>
             <div class="font-semibold mt-1 text-slate-800">${citizenSource.label}</div>
             ${citizenSource.address ? `<div class="text-slate-600 text-[11px] mt-0.5">${citizenSource.address}</div>` : ''}
             <div class="mt-2 text-[10px] text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200 font-semibold">
@@ -393,7 +326,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         sos.addLayer(sourceMarker);
       }
 
-      // 2. Shelter Destination Pin (Safe Haven)
       if (citizenDestination) {
         boundsCoords.push([citizenDestination.lat, citizenDestination.lng]);
         const destIcon = L.divIcon({
@@ -413,9 +345,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         const destMarker = L.marker([citizenDestination.lat, citizenDestination.lng], { icon: destIcon });
         destMarker.bindPopup(`
           <div class="p-2 text-slate-900 text-xs font-sans min-w-[220px]">
-            <div class="font-bold text-sm text-emerald-700 flex items-center gap-1">
-              <span>🛡️ NEAREST SAFE RELIEF SHELTER</span>
-            </div>
+            <div class="font-bold text-sm text-emerald-700">🛡️ NEAREST SAFE RELIEF SHELTER</div>
             <div class="font-semibold mt-1 text-slate-800 text-sm">${citizenDestination.label}</div>
             ${citizenDestination.address ? `<div class="text-slate-600 text-[11px] mt-0.5">${citizenDestination.address}</div>` : ''}
             <div class="mt-2 p-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] flex justify-between font-semibold">
@@ -428,8 +358,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         shelters.addLayer(destMarker);
       }
 
-      // 3. Safe Route Polyline along Verified Dry Streets
-      if (routePolyline && routePolyline.length > 0) {
+      if (routePolyline && routePolyline.length >= 2) {
         boundsCoords.push(...routePolyline);
 
         const glowLine = L.polyline(routePolyline, {
@@ -451,22 +380,68 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         route.addLayer(coreLine);
       }
 
-      // Auto-fit bounds
+      // Render Blocked / Flooded Roads in RED so citizen visually identifies hazards to avoid
+      state.roads.forEach((road) => {
+        const isBlocked = road.status === 'blocked' || road.status === 'flooded';
+        if (!isBlocked) return;
+
+        const geom = roadGeometries[road.id];
+        if (!geom || geom.length < 2) return;
+
+        boundsCoords.push(...geom);
+
+        const blockedLine = L.polyline(geom, {
+          color: '#ef4444',
+          weight: 6,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+
+        blockedLine.bindPopup(`
+          <div class="p-2 text-slate-900 text-xs font-sans min-w-[200px]">
+            <div class="font-bold text-sm text-red-600">🚫 ROAD BLOCKED / SUBMERGED</div>
+            <div class="font-bold mt-1 text-slate-800">${road.road_name || (road as any).name || 'Flooded Arterial'}</div>
+            <div class="text-red-600 text-[11px] font-semibold mt-1">${road.blocked_reason || 'Inundated by floodwaters'}</div>
+            <div class="mt-2 text-[10px] text-emerald-800 bg-emerald-50 p-1.5 rounded border border-emerald-200 font-bold">
+              ✓ Citizen Evacuation Route Safely Bypasses This Zone
+            </div>
+          </div>
+        `);
+
+        roads.addLayer(blockedLine);
+      });
+
+      // Render active pulsating SOS Beacon radar wave
+      if (citizenSource && (sosActive || citizenSource.isSosActive)) {
+        const radarCircle = L.circle([citizenSource.lat, citizenSource.lng], {
+          radius: 140,
+          color: '#ef4444',
+          fillColor: '#ef4444',
+          fillOpacity: 0.25,
+          weight: 2,
+          dashArray: '4, 4',
+        });
+        sos.addLayer(radarCircle);
+      }
+
       if (boundsCoords.length >= 2 && mapInstanceRef.current) {
         try {
           mapInstanceRef.current.fitBounds(L.latLngBounds(boundsCoords), {
             padding: [50, 50],
             maxZoom: 16,
           });
-        } catch (e) {
-          // Leaflet edge case safeguard
-        }
+        } catch {}
       }
 
       return;
     }
 
-    // 1. Render Risk Zones (Polygons)
+    // -------------------------------------------------------------
+    // FULL TACTICAL GIS MODE
+    // -------------------------------------------------------------
+
+    // 1. Render Risk Zones
     if (layersVisible.riskZones) {
       state.risk_zones.forEach((zone) => {
         const color =
@@ -496,41 +471,52 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       });
     }
 
-    // 2. Render Roads & Flood Closures
+    // 2. Render Roads via OSRM real geometry (Phase 11: Tactical GIS Legend)
+    // - Active Primary Route: #06B6D4 (Cyan), 4px width
+    // - Safe Alternative: #10B981 (Emerald), 3px dashed
+    // - Blocked / Flooded: #EF4444 (Red), 5px solid with danger crosses
+    // - Restricted Corridor: #F59E0B (Amber), 3px dotted
     if (layersVisible.roads) {
       state.roads.forEach((road) => {
-        const isBlocked = road.status !== 'open';
-        const color = isBlocked ? '#dc2626' : '#10b981';
+        const isBlocked = road.status === 'blocked' || road.status === 'flooded';
+        const isRestricted = (road.status as string) === 'restricted';
+        const color = isBlocked ? '#EF4444' : isRestricted ? '#F59E0B' : '#10B981';
 
-        const line = L.polyline(
-          [
-            [road.start_lat, road.start_lng],
-            [road.end_lat, road.end_lng],
-          ],
-          {
-            color,
-            weight: isBlocked ? 4 : 3,
-            dashArray: isBlocked ? '6, 6' : undefined,
-            opacity: 0.85,
-          }
-        );
+        const geom = roadGeometries[road.id];
+        if (!geom || geom.length < 2) {
+          // Roads without valid routing geometry are hidden instead of drawing fake straight lines
+          return;
+        }
 
-        line.bindPopup(`
-          <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
-            <div class="font-bold text-sm ${isBlocked ? 'text-red-600' : 'text-emerald-700'}">${road.road_name}</div>
+        const polyline = L.polyline(geom, {
+          color,
+          weight: isBlocked ? 5 : isRestricted ? 3 : 3,
+          dashArray: isBlocked ? undefined : isRestricted ? '3, 6' : undefined,
+          opacity: isBlocked ? 0.95 : 0.85,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+
+        polyline.bindPopup(`
+          <div class="p-1.5 text-slate-900 text-xs font-sans leading-tight">
+            <div class="font-bold text-sm ${isBlocked ? 'text-red-600' : isRestricted ? 'text-amber-600' : 'text-emerald-700'}">
+              ${road.road_name || (road as any).name || 'Urban Corridor'}
+            </div>
             <div class="mt-1">Status: <b class="uppercase">${road.status}</b></div>
-            <div>Risk Score: <b>${road.risk_score}/100</b></div>
-            ${road.blocked_reason ? `<div class="text-red-500 mt-1 font-medium">${road.blocked_reason}</div>` : ''}
+            <div>Travel Time: <b>${road.travel_time ? `${road.travel_time} min` : '--'}</b></div>
+            <div>Flood Risk Score: <b>${road.risk_score}/100</b></div>
+            ${road.blocked_reason ? `<div class="text-red-500 mt-1 font-semibold">${road.blocked_reason}</div>` : ''}
           </div>
         `);
-        roads.addLayer(line);
+
+        roads.addLayer(polyline);
       });
     }
 
     // 3. Render Shelters
     if (layersVisible.shelters) {
       state.shelters.forEach((shelter) => {
-        const usagePct = Math.round((shelter.occupancy / shelter.capacity) * 100);
+        const usagePct = Math.round((shelter.occupancy / Math.max(1, shelter.capacity)) * 100);
         const iconHtml = `
           <div style="background-color:#9333ea; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(147,51,234,0.6); font-size:14px;">
             🏠
@@ -544,7 +530,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <div class="font-bold text-sm text-purple-700">${shelter.shelter_name}</div>
             <div class="mt-1">Capacity: <b>${shelter.occupancy} / ${shelter.capacity}</b> (${usagePct}%)</div>
             <div>Available Headroom: <b class="text-emerald-600">${shelter.available_capacity} beds</b></div>
-            <div>Food Reserve: <b>${shelter.food_stock}</b> | Water: <b>${shelter.water_stock}</b></div>
+            <div>Food: <b>${shelter.food_stock}</b> | Water: <b>${shelter.water_stock}</b></div>
             <div>Power Backup: <b>${shelter.power_backup ? 'Active (Diesel Gen)' : 'Mains Only'}</b></div>
             <div class="text-[10px] text-slate-500 mt-1">${shelter.address}</div>
           </div>
@@ -567,11 +553,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         marker.bindPopup(`
           <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
             <div class="font-bold text-sm text-blue-700">${hosp.hospital_name}</div>
-            <div class="mt-1">General Beds Available: <b>${hosp.available_beds}</b></div>
+            <div class="mt-1">General Beds: <b>${hosp.available_beds}</b></div>
             <div>Critical ICU Beds: <b class="text-red-600">${hosp.icu_beds}</b></div>
             <div>Ambulance Bays: <b>${hosp.ambulances_available} ready</b></div>
             <div>Contact: <b>${hosp.contact_number}</b></div>
-            <div class="text-[10px] text-slate-500 mt-1">${hosp.address || ''}</div>
           </div>
         `);
         hospitals.addLayer(marker);
@@ -598,7 +583,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <div>Status: <b class="${isDeployed ? 'text-red-600' : 'text-blue-600'}">${team.status.toUpperCase()}</b></div>
             <div>Personnel: ${team.personnel} specialists</div>
             <div class="text-[11px] text-slate-600 mt-1">Gear: ${team.equipment}</div>
-            <div class="text-[10px] text-slate-500">Zone: ${team.deployment_zone}</div>
           </div>
         `);
         rescue.addLayer(marker);
@@ -623,8 +607,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <div class="font-bold text-sm text-orange-700">${amb.vehicle_code}</div>
             <div class="mt-1">Driver: <b>${amb.driver_name}</b> (${amb.phone})</div>
             <div>Status: <b class="${isDeployed ? 'text-orange-600' : 'text-emerald-600'}">${amb.status.toUpperCase()}</b></div>
-            <div>Fuel Reserve: <b>${amb.fuel}%</b> | Crew: ${amb.crew_size}</div>
-            <div class="text-[10px] text-slate-500 mt-1">Station: ${amb.deployment_zone}</div>
+            <div>Fuel: <b>${amb.fuel}%</b> | Crew: ${amb.crew_size}</div>
           </div>
         `);
         ambulances.addLayer(marker);
@@ -667,13 +650,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
               <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800">${req.risk_level}</span>
             </div>
             <div>Citizen: <b>${req.citizen_name}</b> (${req.citizen_phone})</div>
-            <div>Trapped: <b>${req.people_count} people</b> (${req.children_count} ch, ${req.elderly_count} eld)</div>
+            <div>Trapped: <b>${req.people_count} people</b></div>
             <div>Type: <b>${req.emergency_type}</b></div>
             <div>Medical: <b>${req.medical_urgency}</b></div>
             <div class="mt-1 text-slate-600 italic">"${req.address_hint}"</div>
-            <div class="mt-1.5 pt-1 border-t text-[11px] text-blue-700 font-semibold">
-              Status: ${req.status.toUpperCase()}
-            </div>
           </div>
         `);
 
@@ -685,174 +665,61 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       });
     }
 
-    // 8. QUANTUM USAGE 1: TACTICAL RESOURCE PRE-POSITIONING & DISPATCH (QAOA)
-    if (layersVisible.quantumDispatch) {
-      QUANTUM_DISPATCH_ROAD_ROUTES.forEach((dispatch) => {
-        // Outer glowing cyan line along real roads
-        const glowLine = L.polyline(dispatch.roadCoords, {
-          color: '#00f0ff',
-          weight: 6,
-          opacity: 0.85,
-          dashArray: '10, 8',
-          lineCap: 'round',
-        });
-
-        // Core cyan line
-        const coreLine = L.polyline(dispatch.roadCoords, {
-          color: '#0284c7',
-          weight: 3,
-          opacity: 0.95,
-        });
-
-        // Midpoint Quantum Waypoint Marker
-        const midIdx = Math.floor(dispatch.roadCoords.length / 2);
-        const midCoord = dispatch.roadCoords[midIdx];
-
-        const waypointIcon = L.divIcon({
-          html: `
-            <div style="background-color:#0284c7; border:2px solid #00f0ff; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:11px; box-shadow:0 0 10px #00f0ff; font-weight:bold;">
-              ⚛️
-            </div>
-          `,
-          className: '',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        });
-
-        const waypointMarker = L.marker(midCoord, { icon: waypointIcon });
-        const popupContent = `
-          <div class="p-2 text-slate-800 text-xs font-sans leading-tight min-w-[240px]">
-            <div class="flex items-center gap-1.5 text-cyan-600 font-bold text-xs uppercase border-b pb-1 mb-1.5">
-              <span>⚛️ QUANTUM USAGE 1</span>
-              <span class="text-[10px] bg-cyan-100 text-cyan-800 px-1 py-0.2 rounded">QAOA DISPATCH</span>
-            </div>
-            <div class="font-bold text-sm text-slate-900">${dispatch.title}</div>
-            <div class="mt-1 text-slate-600">Assigned Squad: <b class="text-blue-700">${dispatch.squad}</b></div>
-            <div class="text-slate-600">Target Node: <b class="text-red-700">${dispatch.target}</b></div>
-            <div class="mt-1.5 p-1.5 rounded bg-cyan-50 border border-cyan-200 text-[11px] text-cyan-950">
-              <div><b>Algorithm:</b> ${dispatch.algorithm}</div>
-              <div><b>Road Distance:</b> ${dispatch.distanceKm} km (Est: ${dispatch.durationMins} mins)</div>
-              <div class="text-[10px] text-slate-600 mt-0.5">${dispatch.energy}</div>
-            </div>
-          </div>
-        `;
-
-        glowLine.bindPopup(popupContent);
-        coreLine.bindPopup(popupContent);
-        waypointMarker.bindPopup(popupContent);
-
-        quantumDispatch.addLayer(glowLine);
-        quantumDispatch.addLayer(coreLine);
-        quantumDispatch.addLayer(waypointMarker);
-      });
-    }
-
-    // 9. QUANTUM USAGE 2: CAPACITY-CONSTRAINED EVACUATION CORRIDORS (QUBO)
-    if (layersVisible.quantumEvac) {
-      QUANTUM_EVACUATION_CORRIDORS.forEach((corridor) => {
-        // High-contrast purple/fuchsia evacuation corridor along real roads
-        const outerCorridor = L.polyline(corridor.roadCoords, {
-          color: '#a855f7',
-          weight: 7,
-          opacity: 0.85,
-          dashArray: '12, 8',
-          lineCap: 'round',
-        });
-
-        const innerCorridor = L.polyline(corridor.roadCoords, {
-          color: '#10b981',
-          weight: 3,
-          opacity: 0.95,
-        });
-
-        // Midpoint Quantum Evac Marker
-        const midIdx = Math.floor(corridor.roadCoords.length / 2);
-        const midCoord = corridor.roadCoords[midIdx];
-
-        const evacIcon = L.divIcon({
-          html: `
-            <div style="background-color:#9333ea; border:2px solid #34d399; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:11px; box-shadow:0 0 10px #a855f7; font-weight:bold;">
-              🚪
-            </div>
-          `,
-          className: '',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        });
-
-        const evacMarker = L.marker(midCoord, { icon: evacIcon });
-        const popupContent = `
-          <div class="p-2 text-slate-800 text-xs font-sans leading-tight min-w-[250px]">
-            <div class="flex items-center gap-1.5 text-purple-700 font-bold text-xs uppercase border-b pb-1 mb-1.5">
-              <span>⚛️ QUANTUM USAGE 2</span>
-              <span class="text-[10px] bg-purple-100 text-purple-800 px-1 py-0.2 rounded">QUBO ZERO-OVERFLOW</span>
-            </div>
-            <div class="font-bold text-sm text-slate-900">${corridor.title}</div>
-            <div class="mt-1 text-slate-600">Origin Zone: <b class="text-orange-700">${corridor.origin}</b></div>
-            <div class="text-slate-600">Designated Shelter: <b class="text-purple-700">${corridor.shelter}</b></div>
-            <div class="mt-1.5 p-1.5 rounded bg-purple-50 border border-purple-200 text-[11px] text-purple-950">
-              <div class="flex justify-between">
-                <span>Evacuee Stream:</span>
-                <b>${corridor.evacueeCount} Citizens</b>
-              </div>
-              <div class="flex justify-between">
-                <span>Capacity Headroom:</span>
-                <b class="text-emerald-700">+${corridor.capacityHeadroom} Beds Free</b>
-              </div>
-              <div class="text-[10px] text-slate-600 mt-1">Constraint: Hard Overflow Penalty P = ∞</div>
-            </div>
-          </div>
-        `;
-
-        outerCorridor.bindPopup(popupContent);
-        innerCorridor.bindPopup(popupContent);
-        evacMarker.bindPopup(popupContent);
-
-        quantumEvac.addLayer(outerCorridor);
-        quantumEvac.addLayer(innerCorridor);
-        quantumEvac.addLayer(evacMarker);
-      });
-    }
-
-    // 10. Render Active Route Polyline if provided (following real map roads)
-    if (routePolyline && routePolyline.length > 0) {
-      const outerPoly = L.polyline(routePolyline, {
-        color: '#38bdf8',
-        weight: 7,
-        opacity: 0.6,
+    // 8. Render Active Primary Route (#06B6D4 Cyan, 4px width, solid glowing line)
+    // NEVER draw routes using only two points
+    if (routePolyline && routePolyline.length >= 2) {
+      const glowPoly = L.polyline(routePolyline, {
+        color: '#06B6D4',
+        weight: 8,
+        opacity: 0.45,
         lineCap: 'round',
+        lineJoin: 'round',
       });
 
-      const innerPoly = L.polyline(routePolyline, {
-        color: '#0284c7',
+      const corePoly = L.polyline(routePolyline, {
+        color: '#06B6D4',
         weight: 4,
         opacity: 0.95,
-        dashArray: '8, 6',
+        lineCap: 'round',
+        lineJoin: 'round',
       });
 
-      const startPin = L.circleMarker(routePolyline[0], {
+      const startMarker = L.circleMarker(routePolyline[0], {
         radius: 6,
-        fillColor: '#10b981',
+        fillColor: '#06B6D4',
         color: '#ffffff',
         weight: 2,
         fillOpacity: 1,
       }).bindTooltip('Origin Dispatch Node', { permanent: false });
 
-      const endPin = L.circleMarker(routePolyline[routePolyline.length - 1], {
+      const endMarker = L.circleMarker(routePolyline[routePolyline.length - 1], {
         radius: 7,
         fillColor: '#ef4444',
         color: '#ffffff',
         weight: 2,
         fillOpacity: 1,
-      }).bindTooltip('Emergency Incident Target', { permanent: false });
+      }).bindTooltip('Destination Incident Target', { permanent: false });
 
-      route.addLayer(outerPoly);
-      route.addLayer(innerPoly);
-      route.addLayer(startPin);
-      route.addLayer(endPin);
+      route.addLayer(glowPoly);
+      route.addLayer(corePoly);
+      route.addLayer(startMarker);
+      route.addLayer(endMarker);
     }
 
-    // 11. AI PREDICTED FLOOD IMPACT ZONES (RED AREA & YELLOW AREA BASED ON IMPACT)
+    // 9. Render Safe Alternative Route (#10B981 Emerald, 3px width, dashed)
+    if (alternativePolyline && alternativePolyline.length >= 2) {
+      const altPoly = L.polyline(alternativePolyline, {
+        color: '#10B981',
+        weight: 3,
+        opacity: 0.85,
+        dashArray: '6, 6',
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+      alternativeRoute.addLayer(altPoly);
+    }
+
+    // 10. AI Predicted Flood Impact Zones
     if (layersVisible.aiFloodZones && state.latest_ai_flood_prediction?.impact_zones) {
       state.latest_ai_flood_prediction.impact_zones.forEach((zone) => {
         const isRed =
@@ -866,7 +733,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           color,
           weight: isRed ? 3.5 : 2.5,
           fillColor,
-          fillOpacity: isRed ? 0.42 : 0.32,
+          fillOpacity: isRed ? 0.38 : 0.28,
           dashArray: isRed ? '6, 4' : '4, 4',
         });
 
@@ -877,39 +744,12 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           { sticky: true, opacity: 0.95 }
         );
 
-        polygon.bindPopup(`
-          <div class="p-2 text-slate-900 text-xs font-sans min-w-[240px] leading-tight">
-            <div class="flex items-center justify-between border-b pb-1.5 mb-1.5">
-              <span class="font-bold text-xs uppercase px-2 py-0.5 rounded text-white ${
-                isRed ? 'bg-red-600' : 'bg-amber-600'
-              }">
-                ${isRed ? '🚨 RED IMPACT ZONE' : '⚠️ YELLOW IMPACT ZONE'}
-              </span>
-              <span class="font-mono text-[11px] font-bold ${isRed ? 'text-red-700' : 'text-amber-700'}">
-                +${zone.water_level_m}m Inundation
-              </span>
-            </div>
-            <div class="font-bold text-sm text-slate-900">${zone.name}</div>
-            <div class="mt-1.5 text-slate-700">
-              Impact Severity: <b class="${isRed ? 'text-red-600 font-black' : 'text-amber-700'}">
-                ${isRed ? 'CRITICAL HIGH-IMPACT FLOOD SURGE' : 'MODERATE IMPACT CATCHMENT'}
-              </b>
-            </div>
-            <div class="text-slate-700">
-              Population at Risk: <b>${zone.population_at_risk.toLocaleString()} citizens</b>
-            </div>
-            <div class="mt-2 p-2 rounded ${isRed ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-200 text-amber-950'} text-[11px]">
-              <div class="font-bold text-[10px] uppercase text-slate-500 mb-0.5">Quantum Optimizer Directives:</div>
-              <div>${zone.quantum_preposition_needed}</div>
-            </div>
-          </div>
-        `);
         aiFloodZones.addLayer(polygon);
       });
     }
 
-    // 12. QUANTUM OPTIMIZER PRE-POSITIONING STAGING POINTS
-    if (layersVisible.quantumPreposition && state.latest_ai_flood_prediction?.quantum_prepositioning_points) {
+    // 11. Strategic Staging Points
+    if (layersVisible.strategicStaging && state.latest_ai_flood_prediction?.quantum_prepositioning_points) {
       state.latest_ai_flood_prediction.quantum_prepositioning_points.forEach((point) => {
         let badgeIcon = '🚤';
         let badgeBg = '#2563eb';
@@ -923,10 +763,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           badgeIcon = '📦';
           badgeBg = '#9333ea';
           badgeBorder = '#c084fc';
-        } else if (point.type === 'drone_relay') {
-          badgeIcon = '📡';
-          badgeBg = '#06b6d4';
-          badgeBorder = '#22d3ee';
         }
 
         const iconHtml = `
@@ -935,9 +771,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <div style="position:relative; background-color:${badgeBg}; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid ${badgeBorder}; font-size:14px; box-shadow:0 0 12px ${badgeBg}; font-weight:bold;">
               ${badgeIcon}
             </div>
-            <div style="position:absolute; bottom:-3px; right:-3px; background-color:#0f172a; color:#38bdf8; font-size:9px; font-weight:900; border:1px solid #38bdf8; border-radius:9999px; padding:0 3px; line-height:12px;">
-              #${point.qubo_rank}
-            </div>
           </div>
         `;
 
@@ -945,29 +778,20 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         const marker = L.marker([point.latitude, point.longitude], { icon });
 
         marker.bindPopup(`
-          <div class="p-2 text-slate-900 text-xs font-sans min-w-[250px] leading-tight">
-            <div class="flex items-center gap-1.5 text-cyan-700 font-bold text-xs uppercase border-b pb-1.5 mb-1.5">
-              <span>⚛️ QUANTUM PRE-POSITIONING STAGING</span>
-              <span class="text-[10px] bg-cyan-100 text-cyan-900 px-1.5 py-0.5 rounded font-mono font-bold">
-                QUBO RANK #${point.qubo_rank}
-              </span>
-            </div>
-            <div class="font-bold text-sm text-slate-900">${point.title}</div>
-            <div class="mt-1 text-slate-700">Covered Sector: <b class="text-blue-700">${point.coverage_sector}</b></div>
-            <div class="text-slate-700">Dry Ground Elevation: <b class="text-emerald-700">${point.dry_ground_elevation_m}m AMSL</b></div>
-            <div class="mt-2 p-2 rounded bg-cyan-50 border border-cyan-200 text-cyan-950 text-[11px] space-y-1">
-              <div><b>Strategic Reason:</b> ${point.staging_reason}</div>
-              <div class="text-[10px] text-cyan-800 font-mono">
-                Optimization Delta: ΔE = ${point.qubo_energy_delta}% faster emergency reach
-              </div>
+          <div class="p-2 text-slate-900 text-xs font-sans min-w-[240px] leading-tight">
+            <div class="font-bold text-sm text-cyan-700">${point.title}</div>
+            <div class="mt-1 text-slate-700">Sector: <b>${point.coverage_sector}</b></div>
+            <div class="text-slate-700">Elevation: <b>${point.dry_ground_elevation_m}m AMSL</b></div>
+            <div class="mt-1.5 p-2 rounded bg-cyan-50 border border-cyan-200 text-cyan-950 text-[11px]">
+              ${point.staging_reason}
             </div>
           </div>
         `);
 
-        quantumPreposition.addLayer(marker);
+        strategicStaging.addLayer(marker);
       });
     }
-  }, [state, layersVisible, routePolyline, onSelectRequest, minimalCitizenMode, citizenSource, citizenDestination]);
+  }, [state, layersVisible, routePolyline, alternativePolyline, onSelectRequest, minimalCitizenMode, citizenSource, citizenDestination, roadGeometries]);
 
   // Handle focus coordinates
   useEffect(() => {
@@ -981,15 +805,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   return (
     <div className={`relative isolate z-0 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 ${className}`}>
-      {/* Leaflet Map DOM Node */}
       <div ref={mapContainerRef} style={{ height, width: '100%' }} />
 
-      {/* ---------------------------------------------------------------- */}
-      {/* CITIZEN MODE OVERLAYS: Clean, spacious, user-ready, no clutter */}
-      {/* ---------------------------------------------------------------- */}
       {minimalCitizenMode ? (
         <>
-          {/* Top Left: Safe Path Status */}
           <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-1.5 pointer-events-auto">
             <div className="bg-slate-900/95 backdrop-blur px-3 py-1.5 rounded-lg border border-emerald-500/60 text-white shadow-xl flex items-center gap-2 text-xs">
               <span className="flex h-2.5 w-2.5 relative">
@@ -1005,7 +824,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             </div>
           </div>
 
-          {/* Top Center: Bypass Alert Banner if roads are blocked */}
           {bypassWarning && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] max-w-md w-full px-2 pointer-events-auto hidden md:block">
               <div className="bg-amber-950/95 backdrop-blur border border-amber-500/70 text-amber-200 px-3 py-1.5 rounded-xl shadow-2xl text-xs flex items-center gap-2">
@@ -1015,7 +833,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             </div>
           )}
 
-          {/* Top Right: Simple Map Style Selector */}
           <div className="absolute top-3 right-3 z-[1000] flex items-center gap-2">
             <select
               aria-label="Map Base Layer"
@@ -1030,7 +847,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             </select>
           </div>
 
-          {/* Bottom Floating Safe Path Indicator */}
           <div className="absolute bottom-3 left-3 right-3 sm:right-auto z-[1000] flex flex-wrap items-center gap-2 bg-slate-950/95 backdrop-blur px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-200 shadow-2xl">
             <div className="flex items-center gap-1.5">
               <span className="text-red-400 font-bold">📍 Source:</span>
@@ -1054,45 +870,38 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         </>
       ) : (
         <>
-          {/* Top Right: Layer & Base Map Toggle Buttons */}
           <div className="absolute top-3 right-3 z-[1000] flex items-center gap-2">
-            {/* Style Selector */}
-            <div className="relative">
-              <select
-                aria-label="Map Base Layer"
-                value={activeTileStyle}
-                onChange={(e) => setActiveTileStyle(e.target.value as MapTileStyle)}
-                className="bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg transition-colors cursor-pointer outline-none"
-              >
-                <option value="tf-transport">⚡ Thunderforest Transport</option>
-                <option value="tf-outdoors">🏔️ Thunderforest Outdoors (Topo)</option>
-                <option value="tf-landscape">🌿 Thunderforest Landscape</option>
-                <option value="carto-dark">🌑 Tactical Dark Matrix</option>
-                <option value="carto-voyager">🗺️ Street Voyager</option>
-              </select>
-            </div>
-
-            {/* Quantum Specs Explainer Button */}
-            <button
-              onClick={() => setShowQuantumModal(true)}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-cyan-900/90 to-purple-900/90 hover:from-cyan-800 hover:to-purple-800 px-2.5 py-1.5 rounded-lg border border-cyan-500/40 text-xs font-semibold text-cyan-200 shadow-lg transition-colors"
-              title="Inspect the 2 Quantum Usages & Mathematical Formulations"
+            <select
+              aria-label="Map Base Layer"
+              value={activeTileStyle}
+              onChange={(e) => setActiveTileStyle(e.target.value as MapTileStyle)}
+              className="bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg transition-colors cursor-pointer outline-none"
             >
-              <Cpu className="h-3.5 w-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Quantum Engine</span>
+              <option value="tf-transport">⚡ Thunderforest Transport</option>
+              <option value="tf-outdoors">🏔️ Thunderforest Outdoors (Topo)</option>
+              <option value="tf-landscape">🌿 Thunderforest Landscape</option>
+              <option value="carto-dark">🌑 Tactical Dark Matrix</option>
+              <option value="carto-voyager">🗺️ Street Voyager</option>
+            </select>
+
+            <button
+              onClick={() => setShowRoutingModal(true)}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-cyan-900/90 to-blue-900/90 hover:from-cyan-800 hover:to-blue-800 px-2.5 py-1.5 rounded-lg border border-cyan-500/40 text-xs font-semibold text-cyan-200 shadow-lg transition-colors cursor-pointer"
+              title="Inspect Dynamic Routing Architecture (A* + D* Lite)"
+            >
+              <Route className="h-3.5 w-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Routing Specs</span>
             </button>
 
-            {/* Layer Dropdown Toggle */}
             <div className="relative">
               <button
                 onClick={() => setShowLayerPanel(!showLayerPanel)}
-                className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg transition-colors"
+                className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg transition-colors cursor-pointer"
               >
                 <Layers className="h-3.5 w-3.5 text-blue-400" />
                 <span>GIS Layers</span>
               </button>
 
-              {/* Layer Dropdown Panel */}
               {showLayerPanel && (
                 <div className="absolute right-0 mt-2 w-52 bg-slate-900/95 backdrop-blur p-2.5 rounded-xl border border-slate-700 shadow-2xl space-y-1.5 text-xs text-slate-200">
                   <div className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider mb-1 px-1">
@@ -1100,22 +909,20 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                   </div>
 
                   {[
-                    { id: 'quantumDispatch' as const, label: '⚛️ Q1: QAOA Dispatch', color: 'bg-cyan-400' },
-                    { id: 'quantumEvac' as const, label: '⚛️ Q2: QUBO Evacuation', color: 'bg-purple-500' },
-                    { id: 'aiFloodZones' as const, label: '🌊 AI Flood Impact (Red/Yellow)', color: 'bg-red-500' },
-                    { id: 'quantumPreposition' as const, label: '📍 Quantum Pre-Positioning', color: 'bg-emerald-400' },
+                    { id: 'roads' as const, label: 'Road Status (OSRM)', color: 'bg-emerald-400' },
                     { id: 'sos' as const, label: 'SOS Emergencies', color: 'bg-red-500' },
                     { id: 'rescue' as const, label: 'NDRF Boat Squads', color: 'bg-blue-500' },
                     { id: 'ambulances' as const, label: '108 Ambulances', color: 'bg-orange-500' },
                     { id: 'shelters' as const, label: 'Relief Shelters', color: 'bg-purple-500' },
                     { id: 'hospitals' as const, label: 'Trauma Hospitals', color: 'bg-sky-500' },
-                    { id: 'roads' as const, label: 'Road Closures', color: 'bg-red-600' },
-                    { id: 'riskZones' as const, label: 'Flood Risk Polygons', color: 'bg-amber-500' },
+                    { id: 'riskZones' as const, label: 'Flood Risk Sectors', color: 'bg-amber-500' },
+                    { id: 'aiFloodZones' as const, label: 'AI Flood Surge (Red/Yellow)', color: 'bg-red-600' },
+                    { id: 'strategicStaging' as const, label: 'Strategic Staging Nodes', color: 'bg-cyan-400' },
                   ].map((layer) => (
                     <button
                       key={layer.id}
                       onClick={() => toggleLayer(layer.id)}
-                      className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-slate-800 transition-colors text-left"
+                      className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-slate-800 transition-colors text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-2 truncate">
                         <span className={`h-2 w-2 rounded-full flex-shrink-0 ${layer.color}`} />
@@ -1133,98 +940,28 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             </div>
           </div>
 
-          {/* Bottom Floating Legend Bar */}
-          <div className="absolute bottom-3 left-3 z-[1000] hidden sm:flex items-center gap-2.5 bg-slate-950/90 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 shadow-xl">
-            <span className="font-semibold text-white">Legend:</span>
+          {/* Bottom Floating Legend Bar (Phase 11: Tactical GIS Legend) */}
+          <div className="absolute bottom-3 left-3 z-[1000] hidden sm:flex items-center gap-3 bg-slate-950/90 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 shadow-xl">
+            <span className="font-semibold text-white">Tactical GIS:</span>
             <span className="flex items-center gap-1 text-cyan-300 font-medium">
-              <span className="h-1.5 w-4 rounded bg-cyan-400" /> Q1 QAOA Road Vector
+              <span className="h-1.5 w-4 rounded bg-[#06B6D4]" /> Active Primary (A*)
             </span>
-            <span className="flex items-center gap-1 text-purple-300 font-medium">
-              <span className="h-1.5 w-4 rounded bg-purple-500" /> Q2 QUBO Evac Corridor
-            </span>
-            <span className="flex items-center gap-1 text-sky-300 font-medium">
-              <span className="h-1.5 w-4 rounded bg-sky-500" /> Selected Road Route
+            <span className="flex items-center gap-1 text-emerald-300 font-medium">
+              <span className="h-1.5 w-4 rounded bg-[#10B981]" /> Safe Alternative
             </span>
             <span className="flex items-center gap-1 text-red-400 font-medium">
-              <span className="h-1.5 w-4 rounded bg-red-500" /> Flooded Road
+              <span className="h-1.5 w-4 rounded bg-[#EF4444]" /> Blocked / Flooded
+            </span>
+            <span className="flex items-center gap-1 text-amber-300 font-medium">
+              <span className="h-1.5 w-4 rounded bg-[#F59E0B]" /> Restricted Corridor
             </span>
           </div>
         </>
       )}
 
-      {/* Modal: Explaining Both Quantum Usages */}
-      {showQuantumModal && (
-        <div className="fixed inset-0 z-[2000] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-cyan-400">
-                <Cpu className="h-6 w-6" />
-                <h3 className="text-lg font-bold text-white">
-                  The 2 Quantum Usages Visible On Tactical Map
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowQuantumModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {/* Usage 1 */}
-              <div className="p-4 rounded-xl bg-cyan-950/30 border border-cyan-500/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-cyan-300 flex items-center gap-1.5">
-                    <span>⚛️ Usage 1:</span> Tactical Resource Pre-Positioning & Dispatch (QAOA)
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono text-[10px]">
-                    p=2 Circuit Depth
-                  </span>
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  <b>What is drawn on the map:</b> The cyan dashed vectors illustrate the quantum-optimal dispatch routes connecting NDRF rescue boat squads and 108 trauma ambulances to critical flood victim clusters along real road corridors.
-                </p>
-                <div className="p-2.5 rounded bg-slate-950/80 border border-slate-800 font-mono text-[11px] text-cyan-200">
-                  H_C = ∑ (w_travel · RoadDist_ij - w_risk · RiskScore_j · Suitability_i) x_ij + λ ∑ (∑_j x_ij - 1)²
-                </div>
-                <div className="text-slate-400">
-                  • <b>Classical Weakness:</b> Classical greedy dispatch isolates downstream victims by assigning boats only to the closest incident, causing resource starvation.
-                </div>
-              </div>
-
-              {/* Usage 2 */}
-              <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-purple-300 flex items-center gap-1.5">
-                    <span>🚪 Usage 2:</span> Capacity-Constrained Mass Evacuation Corridors (QUBO)
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[10px]">
-                    Strict Zero Overflow
-                  </span>
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  <b>What is drawn on the map:</b> The purple-and-emerald double road corridors show verified safe evacuation highways channeling citizens from flooded banks (Krishna Lanka, Bhavanipuram) directly into dry relief centers (IGMC Stadium, Bishop Grassi).
-                </p>
-                <div className="p-2.5 rounded bg-slate-950/80 border border-slate-800 font-mono text-[11px] text-purple-200">
-                  H_evac = ∑ (RoadDist_zs + HazardRisk_zs) y_zs + P_overflow ∑ [max(0, ∑_z y_zs - Capacity_s)]²
-                </div>
-                <div className="text-slate-400">
-                  • <b>Classical Weakness:</b> Classical bin-packing overflows shelters by 15-28% during mass panic. QUBO uses quadratic penalty terms to guarantee 0% overflow while minimizing road flood hazards.
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowQuantumModal(false)}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg"
-              >
-                Return to Tactical Map
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Dynamic Routing Architecture Modal */}
+      {showRoutingModal && (
+        <DynamicRoutingModal isOpen={showRoutingModal} onClose={() => setShowRoutingModal(false)} />
       )}
     </div>
   );

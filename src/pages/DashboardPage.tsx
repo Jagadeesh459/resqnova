@@ -149,7 +149,7 @@ export const DashboardPage: React.FC = () => {
         title="Active Flood Command Directive: Krishna River Catchment Inundation"
         message="Prakasam Barrage outflow exceeding 4.2 lakh cusecs. Low-lying wards in Krishna Lanka, Bhavanipuram, and Ranigari Thota are under immediate evacuation protocol."
         action={{
-          label: 'AI Flood Prediction & Quantum Optimization',
+          label: 'AI Flood Prediction & Dynamic Routing',
           onClick: () => navigate('/ai-flood-predictor'),
         }}
       />
@@ -275,14 +275,14 @@ export const DashboardPage: React.FC = () => {
                   {state.latest_ai_flood_prediction.impact_zones.filter((z) => z.impact_level === 'yellow').length} Yellow Impact Zones
                 </span>
                 <span className="text-slate-300 text-[11px] hidden sm:inline">
-                  • {state.latest_ai_flood_prediction.quantum_prepositioning_points.length} Quantum Pre-Positioned Nodes Staged
+                  • {state.latest_ai_flood_prediction.quantum_prepositioning_points.length} Staged Strategic Logistics Nodes
                 </span>
               </div>
               <button
                 onClick={() => navigate('/ai-flood-predictor')}
                 className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
               >
-                <span>AI Predictor & Training</span>
+                <span>AI Predictor & Flood Model</span>
                 <ArrowRight className="h-3 w-3" />
               </button>
             </div>
@@ -295,7 +295,7 @@ export const DashboardPage: React.FC = () => {
                 ? [selectedRequest.latitude, selectedRequest.longitude]
                 : undefined
             }
-            routePolyline={activeRoute?.coordinates}
+            routePolyline={activeRoute?.coordinates && activeRoute.coordinates.length > 0 ? activeRoute.coordinates : undefined}
             onSelectRequest={(id) => setSelectedRequestId(id)}
           />
 
@@ -311,11 +311,17 @@ export const DashboardPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    activeRoute?.isSafe
+                    !activeRoute || activeRoute.coordinates.length === 0
+                      ? 'bg-red-950 text-red-300 border border-red-700/60'
+                      : activeRoute?.isSafe
                       ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/60'
                       : 'bg-amber-950 text-amber-300 border border-amber-700/60'
                   }`}>
-                    {activeRoute?.isSafe ? 'VERIFIED CLEAR OF FLOOD RISKS' : 'BYPASS ACTIVE (AVOIDING SUBMERGED ARTERIES)'}
+                    {!activeRoute || activeRoute.coordinates.length === 0
+                      ? 'ROUTE UNAVAILABLE (ROAD SUBMERGED)'
+                      : activeRoute?.isSafe
+                      ? 'VERIFIED CLEAR OF FLOOD RISKS'
+                      : 'BYPASS ACTIVE (AVOIDING SUBMERGED ARTERIES)'}
                   </span>
                   <button
                     onClick={() => {
