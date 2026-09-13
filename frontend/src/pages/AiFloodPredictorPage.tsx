@@ -680,13 +680,13 @@ export const AiFloodPredictorPage: React.FC = () => {
                   Calculated Flood Impact Zones (Red Area & Yellow Area):
                 </h3>
                 <span className="text-xs text-slate-400">
-                  {latestPred.impact_zones.length} Zones Identified
+                  {(latestPred.impact_zones || latestPred.red_impact_zones || []).length} Zones Identified
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                {latestPred.impact_zones.map((zone) => {
-                  const isRed = zone.impact_level === 'red';
+                {(latestPred.impact_zones || latestPred.red_impact_zones || []).map((zone) => {
+                  const isRed = zone.impact_level === 'red' || zone.impact_level === 'Critical - Red Area' || zone.severity_category === 'red';
                   return (
                     <div
                       key={zone.id}
@@ -709,16 +709,16 @@ export const AiFloodPredictorPage: React.FC = () => {
                         </span>
                       </div>
 
-                      <h4 className="font-bold text-white text-sm">{zone.name}</h4>
+                      <h4 className="font-bold text-white text-sm">{zone.name || zone.zone_name}</h4>
                       <p className="text-slate-300 text-[11px]">
-                        Population at Risk: <b>{zone.population_at_risk.toLocaleString()} citizens</b>
+                        Population at Risk: <b>{(zone.population_at_risk || zone.citizens_at_risk || 0).toLocaleString()} citizens</b>
                       </p>
 
                       <div className="p-2 rounded bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300">
                         <span className="text-slate-500 block text-[10px] uppercase font-bold">
                           Strategic Pre-Positioning Directive:
                         </span>
-                        <span>{zone.quantum_preposition_needed}</span>
+                        <span>{zone.quantum_preposition_needed || zone.strategic_preposition_needed || zone.recommended_action}</span>
                       </div>
                     </div>
                   );
@@ -734,28 +734,28 @@ export const AiFloodPredictorPage: React.FC = () => {
                   Strategic Pre-Positioning Staging Nodes (Prior to Peak):
                 </h3>
                 <span className="text-xs text-cyan-400 font-mono">
-                  All 4 Nodes Staged on High Ground
+                  All {(latestPred.quantum_prepositioning_points || latestPred.strategic_prepositioning_points || []).length} Nodes Staged on High Ground
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                {latestPred.quantum_prepositioning_points.map((point) => (
+                {(latestPred.quantum_prepositioning_points || latestPred.strategic_prepositioning_points || []).map((point) => (
                   <div
                     key={point.id}
                     className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 space-y-2 flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center justify-between text-[11px] mb-1">
-                        <span className="font-mono text-cyan-400 font-bold">STAGING PRIORITY #{point.qubo_rank}</span>
-                        <span className="text-emerald-400 font-bold">Elev: {point.dry_ground_elevation_m}m</span>
+                        <span className="font-mono text-cyan-400 font-bold">STAGING PRIORITY #{point.qubo_rank || point.priority_rank || 1}</span>
+                        <span className="text-emerald-400 font-bold">Elev: {point.dry_ground_elevation_m || point.elevation_m || 25}m</span>
                       </div>
-                      <h5 className="font-bold text-white line-clamp-1">{point.title}</h5>
+                      <h5 className="font-bold text-white line-clamp-1">{point.title || point.label}</h5>
                       <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{point.staging_reason}</p>
                     </div>
 
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>Covering: <b>{point.coverage_sector}</b></span>
-                      <span className="text-cyan-300 font-mono font-bold">Priority Score: {point.qubo_energy_delta}</span>
+                      <span>Covering: <b>{point.coverage_sector || 'Basin Sector'}</b></span>
+                      <span className="text-cyan-300 font-mono font-bold">Priority Score: {point.qubo_energy_delta || 15}</span>
                     </div>
                   </div>
                 ))}

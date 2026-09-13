@@ -720,8 +720,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     }
 
     // 10. AI Predicted Flood Impact Zones
-    if (layersVisible.aiFloodZones && state.latest_ai_flood_prediction?.impact_zones) {
-      state.latest_ai_flood_prediction.impact_zones.forEach((zone) => {
+    const activeImpactZones = state.latest_ai_flood_prediction?.impact_zones || state.latest_ai_flood_prediction?.red_impact_zones || [];
+    if (layersVisible.aiFloodZones && activeImpactZones.length > 0) {
+      activeImpactZones.forEach((zone) => {
+        if (!zone.polygon || zone.polygon.length < 3) return;
         const isRed =
           zone.impact_level === 'red' ||
           zone.impact_level === 'Critical - Red Area' ||
@@ -739,7 +741,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
         polygon.bindTooltip(
           `<div style="font-weight:bold; font-size:11px; color:${isRed ? '#dc2626' : '#b45309'}; padding: 2px;">
-            ${isRed ? '🚨 [RED AREA]' : '⚠️ [YELLOW AREA]'} ${zone.name} (+${zone.water_level_m}m)
+            ${isRed ? '🚨 [RED AREA]' : '⚠️ [YELLOW AREA]'} ${zone.name || zone.zone_name || 'Impact Zone'} (+${zone.water_level_m || 2}m)
           </div>`,
           { sticky: true, opacity: 0.95 }
         );
@@ -749,17 +751,22 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     }
 
     // 11. Strategic Staging Points
-    if (layersVisible.strategicStaging && state.latest_ai_flood_prediction?.quantum_prepositioning_points) {
-      state.latest_ai_flood_prediction.quantum_prepositioning_points.forEach((point) => {
+    const activeStagingPoints = state.latest_ai_flood_prediction?.quantum_prepositioning_points || state.latest_ai_flood_prediction?.strategic_prepositioning_points || [];
+    if (layersVisible.strategicStaging && activeStagingPoints.length > 0) {
+      activeStagingPoints.forEach((point) => {
+        const lat = point.latitude ?? point.lat;
+        const lng = point.longitude ?? point.lng;
+        if (lat == null || lng == null) return;
+
         let badgeIcon = '🚤';
         let badgeBg = '#2563eb';
         let badgeBorder = '#60a5fa';
 
-        if (point.type === 'ambulance_als') {
+        if (point.type === 'ambulance_als' || point.type === 'ambulance') {
           badgeIcon = '🚑';
           badgeBg = '#ea580c';
           badgeBorder = '#fb923c';
-        } else if (point.type === 'relief_staging') {
+        } else if (point.type === 'relief_staging' || point.type === 'shelter') {
           badgeIcon = '📦';
           badgeBg = '#9333ea';
           badgeBorder = '#c084fc';
@@ -775,13 +782,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         `;
 
         const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [38, 38], iconAnchor: [19, 19] });
-        const marker = L.marker([point.latitude, point.longitude], { icon });
+        const marker = L.marker([lat, lng], { icon });
 
         marker.bindPopup(`
           <div class="p-2 text-slate-900 text-xs font-sans min-w-[240px] leading-tight">
-            <div class="font-bold text-sm text-cyan-700">${point.title}</div>
-            <div class="mt-1 text-slate-700">Sector: <b>${point.coverage_sector}</b></div>
-            <div class="text-slate-700">Elevation: <b>${point.dry_ground_elevation_m}m AMSL</b></div>
+            <div class="font-bold text-sm text-cyan-700">${point.title || point.label || 'Staging Point'}</div>
+            <div class="mt-1 text-slate-700">Sector: <b>${point.coverage_sector || 'General Basin'}</b></div>
+            <div class="text-slate-700">Elevation: <b>${point.dry_ground_elevation_m || point.elevation_m || 25}m AMSL</b></div>
             <div class="mt-1.5 p-2 rounded bg-cyan-50 border border-cyan-200 text-cyan-950 text-[11px]">
               ${point.staging_reason}
             </div>
