@@ -4,14 +4,26 @@
 -- PostgreSQL / Supabase SQL Standard DDL
 -- ==============================================================================
 
--- 1. Roads Table (Directed urban topological edges for A* and D* Lite)
+-- 1. Intersections Table (Graph Vertices V for A* and D* Lite)
+CREATE TABLE IF NOT EXISTS public.intersections (
+    node_id TEXT PRIMARY KEY,
+    name TEXT,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    elevation_m DOUBLE PRECISION DEFAULT 20.0,
+    district TEXT DEFAULT 'NTR',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. Roads Table (Directed Topological Edges E for A* and D* Lite)
 CREATE TABLE IF NOT EXISTS public.roads (
     id TEXT PRIMARY KEY,
+    road_id TEXT,                               -- Alias matching dataset format (e.g. 'R001')
     road_name TEXT NOT NULL,
     name TEXT,
     district TEXT DEFAULT 'NTR',
-    source_node TEXT,
-    target_node TEXT,
+    source_node TEXT REFERENCES public.intersections(node_id), -- Starting intersection (e.g. 'N001')
+    target_node TEXT REFERENCES public.intersections(node_id), -- Ending intersection (e.g. 'N002')
     source_lat DOUBLE PRECISION,
     source_lng DOUBLE PRECISION,
     target_lat DOUBLE PRECISION,
@@ -20,18 +32,25 @@ CREATE TABLE IF NOT EXISTS public.roads (
     start_lng DOUBLE PRECISION NOT NULL,
     end_lat DOUBLE PRECISION NOT NULL,
     end_lng DOUBLE PRECISION NOT NULL,
+    distance_m DOUBLE PRECISION DEFAULT 2500.0, -- Distance in meters for A* cost evaluation
     distance_km DOUBLE PRECISION DEFAULT 2.5,
+    travel_time_sec DOUBLE PRECISION DEFAULT 600.0, -- Travel time in seconds
     travel_time_min DOUBLE PRECISION DEFAULT 10.0,
     travel_time DOUBLE PRECISION DEFAULT 10.0,
     flood_risk DOUBLE PRECISION DEFAULT 0.0,
     risk_score DOUBLE PRECISION DEFAULT 10.0,
     congestion DOUBLE PRECISION DEFAULT 1.0,
-    status TEXT DEFAULT 'open',
+    status TEXT DEFAULT 'open',                 -- 'open' | 'blocked' | 'flooded' | 'restricted'
     blocked_reason TEXT,
     road_type TEXT DEFAULT 'highway',
-    coordinates JSONB,
+    coordinates JSONB,                          -- GeoJSON LineString or [[lat, lng], ...] waypoint array
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Fast Graph Traversal Indexes (for sub-millisecond A* and D* Lite neighbor expansion)
+CREATE INDEX IF NOT EXISTS idx_roads_source ON public.roads(source_node);
+CREATE INDEX IF NOT EXISTS idx_roads_target ON public.roads(target_node);
+CREATE INDEX IF NOT EXISTS idx_roads_status ON public.roads(status);
 
 -- 2. Citizen Requests Table
 CREATE TABLE IF NOT EXISTS public.citizen_requests (
@@ -151,6 +170,7 @@ CREATE TABLE IF NOT EXISTS public.rescue_missions (
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.intersections;
         ALTER PUBLICATION supabase_realtime ADD TABLE public.roads;
         ALTER PUBLICATION supabase_realtime ADD TABLE public.citizen_requests;
         ALTER PUBLICATION supabase_realtime ADD TABLE public.rescue_teams;

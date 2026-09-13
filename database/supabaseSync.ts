@@ -32,20 +32,37 @@ export async function fetchCloudRoads(): Promise<Road[]> {
       console.warn('[Supabase Roads] fetch notice:', error?.message);
       return [];
     }
-    return data.map((r: any) => ({
-      id: r.id,
-      road_name: r.road_name || r.name,
-      district: r.district || 'NTR',
-      status: r.status || 'open',
-      blocked_reason: r.blocked_reason,
-      start_lat: r.start_lat,
-      start_lng: r.start_lng,
-      end_lat: r.end_lat,
-      end_lng: r.end_lng,
-      travel_time: r.travel_time_min || r.travel_time || 10,
-      risk_score: r.risk_score != null ? Math.round(r.risk_score) : 10,
-      updated_at: r.updated_at || new Date().toISOString(),
-    }));
+    return data.map((r: any) => {
+      // Support GeoJSON LineString format or direct [lat, lng] array
+      let coords: [number, number][] | undefined = undefined;
+      if (r.coordinates) {
+        if (Array.isArray(r.coordinates)) {
+          coords = r.coordinates;
+        } else if (r.coordinates.type === 'LineString' && Array.isArray(r.coordinates.coordinates)) {
+          // GeoJSON LineString stores [lng, lat], map to Leaflet [lat, lng]
+          coords = r.coordinates.coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
+        }
+      }
+
+      return {
+        id: r.road_id || r.id,
+        road_name: r.road_name || r.name,
+        district: r.district || 'NTR',
+        source_node: r.source_node,
+        target_node: r.target_node,
+        status: r.status || 'open',
+        blocked_reason: r.blocked_reason,
+        start_lat: r.start_lat,
+        start_lng: r.start_lng,
+        end_lat: r.end_lat,
+        end_lng: r.end_lng,
+        distance_km: r.distance_m ? r.distance_m / 1000 : r.distance_km || 2.5,
+        travel_time: r.travel_time_sec ? r.travel_time_sec / 60 : r.travel_time_min || r.travel_time || 10,
+        risk_score: r.risk_score != null ? Math.round(r.risk_score) : 10,
+        coordinates: coords,
+        updated_at: r.updated_at || new Date().toISOString(),
+      };
+    });
   } catch (err) {
     console.warn('[Supabase Roads] Exception handled:', err);
     return [];

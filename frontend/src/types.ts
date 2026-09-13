@@ -143,16 +143,21 @@ export interface Hospital {
 
 export interface Road {
   id: string;
+  road_id?: string;
   road_name: string;
   district: string;
+  source_node?: string;
+  target_node?: string;
   status: 'open' | 'flooded' | 'blocked';
   blocked_reason?: string;
   start_lat: number;
   start_lng: number;
   end_lat: number;
   end_lng: number;
+  distance_km?: number;
   travel_time: number;
   risk_score: number;
+  coordinates?: [number, number][];
   updated_at: string;
 }
 
