@@ -27,4 +27,6 @@ export interface GraphBuildStats {
   totalRoads: number;
   totalBlockedRoadsSkipped: number;
   totalGraphEdges: number;
+  totalGeometryPoints?: number;
 }
+
