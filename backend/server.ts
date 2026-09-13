@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { db } from '../database/db';
@@ -11,6 +12,9 @@ import {
   assignAmbulanceGreenCorridor,
   recommendSafeShelter,
 } from './routingEngine';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -554,6 +558,7 @@ async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       root: path.resolve(__dirname, '../frontend'),
+      configFile: path.resolve(__dirname, '../vite.config.ts'),
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
