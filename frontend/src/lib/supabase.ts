@@ -34,6 +34,7 @@ export function getSupabase(): SupabaseClient | null {
   return supabaseClientInstance;
 }
 
+export const supabase = getSupabase();
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export interface SupabaseSyncResult {
