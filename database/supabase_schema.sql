@@ -1,4 +1,4 @@
-﻿-- ==============================================================================
+-- ==============================================================================
 -- ResQNova: Master Supabase Schema & Realtime Bus Configuration
 -- Target Region: Vijayawada / NTR District Urban Flood Mesh
 -- ==============================================================================
@@ -151,3 +151,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.roads;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.citizen_requests;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.rescue_teams;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.ambulances;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.shelters;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.hospitals;
