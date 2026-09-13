@@ -1,16 +1,17 @@
 -- ==============================================================================
 -- ResQNova: Master Supabase Schema & Realtime Bus Configuration
 -- Target Region: Vijayawada / NTR District Urban Flood Mesh
+-- PostgreSQL / Supabase SQL Standard DDL
 -- ==============================================================================
 
 -- 1. Roads Table (Directed urban topological edges for A* and D* Lite)
 CREATE TABLE IF NOT EXISTS public.roads (
     id TEXT PRIMARY KEY,
     road_name TEXT NOT NULL,
-    name TEXT,                                  -- Alias
+    name TEXT,
     district TEXT DEFAULT 'NTR',
-    source_node TEXT,                           -- e.g. "NODE_KRISHNA_LANKA_ENTRY"
-    target_node TEXT,                           -- e.g. "NODE_BANDAR_ROAD_JCT"
+    source_node TEXT,
+    target_node TEXT,
     source_lat DOUBLE PRECISION,
     source_lng DOUBLE PRECISION,
     target_lat DOUBLE PRECISION,
@@ -22,13 +23,13 @@ CREATE TABLE IF NOT EXISTS public.roads (
     distance_km DOUBLE PRECISION DEFAULT 2.5,
     travel_time_min DOUBLE PRECISION DEFAULT 10.0,
     travel_time DOUBLE PRECISION DEFAULT 10.0,
-    flood_risk DOUBLE PRECISION DEFAULT 0.0,    -- 0.0 (Dry) to 1.0 (Submerged)
-    risk_score DOUBLE PRECISION DEFAULT 10.0,   -- 0 to 100
-    congestion DOUBLE PRECISION DEFAULT 1.0,    -- 1.0 (Free flow) to 5.0 (Gridlock)
-    status TEXT DEFAULT 'open',                 -- 'open' | 'flooded' | 'blocked' | 'restricted'
+    flood_risk DOUBLE PRECISION DEFAULT 0.0,
+    risk_score DOUBLE PRECISION DEFAULT 10.0,
+    congestion DOUBLE PRECISION DEFAULT 1.0,
+    status TEXT DEFAULT 'open',
     blocked_reason TEXT,
     road_type TEXT DEFAULT 'highway',
-    coordinates JSONB,                          -- Array of [lat, lng] polyline points
+    coordinates JSONB,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -67,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.rescue_teams (
     phone TEXT,
     personnel INTEGER DEFAULT 6,
     equipment TEXT,
-    status TEXT DEFAULT 'available',           -- 'available' | 'deployed' | 'docked'
+    status TEXT DEFAULT 'available',
     deployment_zone TEXT,
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
@@ -80,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.ambulances (
     vehicle_code TEXT NOT NULL,
     driver_name TEXT,
     phone TEXT,
-    status TEXT DEFAULT 'available',           -- 'available' | 'deployed' | 'maintenance'
+    status TEXT DEFAULT 'available',
     fuel INTEGER DEFAULT 100,
     crew_size INTEGER DEFAULT 3,
     deployment_zone TEXT,
@@ -146,10 +147,18 @@ CREATE TABLE IF NOT EXISTS public.rescue_missions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 9. Enable Realtime Replication
-ALTER PUBLICATION supabase_realtime ADD TABLE public.roads;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.citizen_requests;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.rescue_teams;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.ambulances;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.shelters;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.hospitals;
+-- 9. Enable Realtime Replication in Supabase
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.roads;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.citizen_requests;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.rescue_teams;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.ambulances;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.shelters;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.hospitals;
+    END IF;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+    WHEN others THEN NULL;
+END $$;
