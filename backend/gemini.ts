@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { db } from './db';
-import { CitizenRequest, PriorityLevel } from '../src/types';
+import { db } from '../database/db';
+import { CitizenRequest, PriorityLevel } from '../frontend/src/types';
 
 interface GeminiTriageResponse {
   riskScore: number;

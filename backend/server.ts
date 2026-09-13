@@ -2,15 +2,15 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
-import { db } from './server/db';
-import { runAiTriageAndDispatch } from './server/gemini';
+import { db } from '../database/db';
+import { runAiTriageAndDispatch } from './gemini';
 import {
   runAStarRouting,
   runDStarReplanning,
   assignRescueTeamPriorityQueue,
   assignAmbulanceGreenCorridor,
   recommendSafeShelter,
-} from './server/routingEngine';
+} from './routingEngine';
 
 dotenv.config();
 
@@ -553,6 +553,7 @@ app.post('/api/route', async (req, res) => {
 async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
+      root: path.resolve(__dirname, '../frontend'),
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });

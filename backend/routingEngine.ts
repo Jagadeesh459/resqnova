@@ -1,6 +1,6 @@
-import { db } from './db';
+import { db } from '../database/db';
 import { haversineDistance } from './gemini';
-import { Road, CitizenRequest, RescueTeam, Ambulance, Shelter, Hospital } from '../src/types';
+import { Road, CitizenRequest, RescueTeam, Ambulance, Shelter, Hospital } from '../frontend/src/types';
 
 export interface RouteCoordinates {
   coordinates: [number, number][]; // [lat, lng] pairs for Leaflet Polyline

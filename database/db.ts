@@ -10,7 +10,7 @@ import {
   AIExecutionLog,
   UserProfile,
   ResQNovaState,
-} from '../src/types';
+} from '../frontend/src/types';
 import {
   syncRequestToCloud,
   syncRoadStatusToCloud,

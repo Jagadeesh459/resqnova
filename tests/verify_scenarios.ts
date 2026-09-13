@@ -4,9 +4,9 @@ import {
   assignRescueTeamPriorityQueue,
   assignAmbulanceGreenCorridor,
   buildVijayawadaRoadGraph,
-} from '../server/routingEngine';
-import { db } from '../server/db';
-import { CitizenRequest, RescueTeam, Ambulance, Hospital } from '../src/types';
+} from '../backend/routingEngine';
+import { db } from '../database/db';
+import { CitizenRequest, RescueTeam, Ambulance, Hospital } from '../frontend/src/types';
 
 async function runVerificationScenarios() {
   console.log('================================================================');

@@ -15,9 +15,16 @@ export type EmergencyType =
   | 'Medical Urgent'
   | 'Structure Collapse'
   | 'Food/Water Cutoff'
-  | 'Elderly/Infant Evac';
+  | 'Elderly/Infant Evac'
+  | 'Rooftop Evacuation'
+  | 'Medical Emergency'
+  | 'Electrical Hazard'
+  | 'Flash Flood Trapped'
+  | 'Landslide / Mudflow'
+  | 'Stranded Commuters'
+  | string;
 
-export type MedicalUrgency = 'none' | 'moderate' | 'critical';
+export type MedicalUrgency = 'none' | 'low' | 'moderate' | 'critical';
 
 export type PriorityLevel = 'Low' | 'Moderate' | 'High' | 'Critical';
 
@@ -51,7 +58,7 @@ export interface CitizenRequest {
   ai_confidence: number; // 0 - 100
   ai_reason?: string;
   ai_recommendation?: string;
-  ai_stage: 'received' | 'context_loaded' | 'gemini_evaluated' | 'dispatched' | 'completed';
+  ai_stage: 'received' | 'context_loaded' | 'gemini_evaluated' | 'dispatched' | 'completed' | 'analyzed' | 'queued';
   status: RequestStatus;
   rescue_team_id?: string;
   ambulance_id?: string;

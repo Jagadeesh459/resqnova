@@ -1,5 +1,5 @@
-﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { CitizenRequest, RescueTeam, Ambulance, Road } from '../src/types';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { CitizenRequest, RescueTeam, Ambulance, Road } from '../frontend/src/types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xqadvyfpqubqtakjrkim.supabase.co';
 const supabaseKey =
