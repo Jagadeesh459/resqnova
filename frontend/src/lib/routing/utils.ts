@@ -69,9 +69,12 @@ export function geoJsonToLeafletCoordinates(
 export function findNearestNode(
   nodes: Map<string, { id: string; latitude: number; longitude: number }>,
   targetLat: number,
-  targetLng: number
+  targetLng: number,
+  excludeNodeId?: string,
+  filter?: (node: { id: string; latitude: number; longitude: number }) => boolean,
+  maxRadiusMeters: number = 10000
 ): string | null {
-  const result = findNearestNodeWithDistance(nodes, targetLat, targetLng);
+  const result = findNearestNodeWithDistance(nodes, targetLat, targetLng, excludeNodeId, filter, maxRadiusMeters);
   return result ? result.nodeId : null;
 }
 
@@ -81,14 +84,20 @@ export function findNearestNode(
 export function findNearestNodeWithDistance(
   nodes: Map<string, { id: string; latitude: number; longitude: number }>,
   targetLat: number,
-  targetLng: number
+  targetLng: number,
+  excludeNodeId?: string,
+  filter?: (node: { id: string; latitude: number; longitude: number }) => boolean,
+  maxRadiusMeters: number = 10000
 ): { nodeId: string; distanceMeters: number; node: { id: string; latitude: number; longitude: number } } | null {
   let nearestResult: { nodeId: string; distanceMeters: number; node: { id: string; latitude: number; longitude: number } } | null = null;
   let minDistance = Infinity;
 
   nodes.forEach((node) => {
+    if (excludeNodeId && node.id === excludeNodeId) return;
+    if (filter && !filter(node)) return;
+
     const dist = haversineDistance(targetLat, targetLng, node.latitude, node.longitude);
-    if (dist < minDistance) {
+    if (dist < minDistance && dist <= maxRadiusMeters) {
       minDistance = dist;
       nearestResult = {
         nodeId: node.id,
@@ -100,6 +109,7 @@ export function findNearestNodeWithDistance(
 
   return nearestResult;
 }
+
 
 /**
  * Computes compass bearing in degrees between two GPS coordinates

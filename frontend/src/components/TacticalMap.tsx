@@ -66,6 +66,9 @@ export interface TacticalMapProps {
   // Custom Road Overrides (e.g. from graph inspector)
   customRoads?: any[];
   blockedRoadIds?: Set<string>;
+  roadStatusOverrides?: Map<string, any> | Record<string, any>;
+  onRoadStatusChange?: (roadId: string, newStatus: 'open' | 'restricted' | 'blocked' | 'flooded') => void;
+  isEmergencyRoute?: boolean;
 
   // Route Simulation / Animated Navigation props
   isSimulatingRoute?: boolean;
@@ -145,6 +148,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   nearestSnap,
   customRoads,
   blockedRoadIds,
+  roadStatusOverrides,
+  onRoadStatusChange,
+  isEmergencyRoute = false,
   isSimulatingRoute = false,
   simulationSpeed = 1,
   vehicleType = 'default',
@@ -155,6 +161,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const baseTileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Global window handler for Leaflet popup actions
+  useEffect(() => {
+    (window as any).resqnovaSetRoadStatus = (roadId: string, status: any) => {
+      onRoadStatusChange?.(roadId, status);
+    };
+  }, [onRoadStatusChange]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTileStyle, setActiveTileStyle] = useState<MapTileStyle>('tf-transport');
@@ -365,6 +378,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     };
   }, [state?.roads, customRoads]);
 
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+  }, [onMapClick]);
+
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
@@ -400,10 +418,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       vehicles: L.layerGroup().addTo(map),
     };
 
-    // Attach click listener
+    // Attach click listener using stable ref
     map.on('click', (e: L.LeafletMouseEvent) => {
-      if (onMapClick) {
-        onMapClick(Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6)), e);
+      if (onMapClickRef.current) {
+        onMapClickRef.current(Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6)), e);
       }
     });
 
@@ -413,7 +431,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [createBaseLayer, onMapClick]);
+  }, []);
 
   // Render Dynamic GIS Layers
   useEffect(() => {
@@ -456,11 +474,23 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     if (layersVisible.roads) {
       activeRoadList.forEach((road) => {
         const roadId = road.road_id || road.id || '';
-        const isBlocked =
-          (blockedRoadIds && blockedRoadIds.has(roadId)) ||
-          road.status === 'blocked' ||
-          road.status === 'flooded';
-        const isRestricted = (road.status as string) === 'restricted';
+        const rawStatus = (road.status || 'open').toLowerCase();
+        let status = rawStatus;
+
+        if (blockedRoadIds && blockedRoadIds.has(roadId)) {
+          status = 'blocked';
+        }
+        if (roadStatusOverrides) {
+          const ov =
+            roadStatusOverrides instanceof Map
+              ? roadStatusOverrides.get(roadId) || roadStatusOverrides.get(roadId.replace(/_rev$/, ''))
+              : roadStatusOverrides[roadId] || roadStatusOverrides[roadId.replace(/_rev$/, '')];
+          if (ov) status = ov;
+        }
+
+        const isBlocked = status === 'blocked';
+        const isFlooded = status === 'flooded';
+        const isRestricted = status === 'restricted';
 
         // Retrieve full coordinates from cache or direct GeoJSON
         let geom = roadGeometries[roadId] || roadGeometries[road.id];
@@ -470,33 +500,60 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
         if (!geom || geom.length < 2) return;
 
-        if (isBlocked) {
-          // Blocked Road: Glowing Red Border + Thick Red Dashed Line
+        const roadNameDisplay = road.road_name || roadId;
+        const statusColor = isFlooded ? '#dc2626' : isBlocked ? '#ef4444' : isRestricted ? '#f59e0b' : '#10b981';
+
+        const popupHtml = `
+          <div style="font-family:system-ui,-apple-system,sans-serif; min-width:220px; padding:4px;" class="text-slate-900">
+            <div style="font-weight:800; font-size:13px; color:#0f172a; margin-bottom:2px;">${roadNameDisplay}</div>
+            <div style="font-size:11px; color:#64748b; margin-bottom:6px;">
+              ID: <span style="font-family:monospace; background:#f1f5f9; padding:1px 4px; border-radius:3px;">${roadId}</span> • Status: <b style="text-transform:uppercase; color:${statusColor};">${status}</b>
+            </div>
+            <div style="border-top:1px solid #e2e8f0; padding-top:6px;">
+              <div style="font-size:10px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:5px;">Change Live Status:</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                <button onclick="window.resqnovaSetRoadStatus('${roadId}','open')" style="background:#10b981; color:#fff; border:none; border-radius:6px; padding:5px 6px; font-size:10px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:2px;">🟢 Open</button>
+                <button onclick="window.resqnovaSetRoadStatus('${roadId}','restricted')" style="background:#f59e0b; color:#fff; border:none; border-radius:6px; padding:5px 6px; font-size:10px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:2px;">🟡 Restricted</button>
+                <button onclick="window.resqnovaSetRoadStatus('${roadId}','blocked')" style="background:#ef4444; color:#fff; border:none; border-radius:6px; padding:5px 6px; font-size:10px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:2px;">🔴 Blocked</button>
+                <button onclick="window.resqnovaSetRoadStatus('${roadId}','flooded')" style="background:#dc2626; color:#fff; border:none; border-radius:6px; padding:5px 6px; font-size:10px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:2px;">🌊 Flooded</button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (isFlooded) {
+          // Flooded Road: Glowing Red Halo + Thick Dashed Red
           const glowLine = L.polyline(geom, {
             color: '#dc2626',
-            weight: 8,
-            opacity: 0.4,
+            weight: 9,
+            opacity: 0.5,
             lineCap: 'round',
           });
 
           const dashedLine = L.polyline(geom, {
             color: '#ef4444',
-            weight: 4,
+            weight: 4.5,
             opacity: 0.95,
+            dashArray: '5, 5',
+            lineCap: 'round',
+          });
+
+          dashedLine.bindPopup(popupHtml);
+          glowLine.bindPopup(popupHtml);
+
+          roads.addLayer(glowLine);
+          roads.addLayer(dashedLine);
+        } else if (isBlocked) {
+          // Blocked Road: Thick Red Dashed Line
+          const dashedLine = L.polyline(geom, {
+            color: '#ef4444',
+            weight: 4.5,
+            opacity: 0.9,
             dashArray: '6, 6',
             lineCap: 'round',
           });
 
-          dashedLine.bindPopup(`
-            <div class="p-2 text-slate-900 text-xs font-sans min-w-[200px]">
-              <div class="font-bold text-sm text-red-600">🚫 ROAD BLOCKED / INUNDATED</div>
-              <div class="font-bold mt-1 text-slate-800">${road.road_name || roadId}</div>
-              <div class="text-red-600 text-[11px] font-semibold mt-1">${road.blocked_reason || 'Submerged by urban floodwaters'}</div>
-              <div class="mt-1 text-[10px] text-slate-500 font-mono">Excluded from A* & D* Lite graph</div>
-            </div>
-          `);
-
-          roads.addLayer(glowLine);
+          dashedLine.bindPopup(popupHtml);
           roads.addLayer(dashedLine);
         } else if (isRestricted) {
           // Restricted Road: Yellow Dashed
@@ -507,15 +564,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             dashArray: '4, 4',
             lineCap: 'round',
           });
+          yellowLine.bindPopup(popupHtml);
           roads.addLayer(yellowLine);
         } else if (mode === 'routing-demo' || mode === 'routing-test' || mode === 'dashboard') {
-          // Open Road: Subtle Slate/Cyan
+          // Open Road: Clean Gray / Slate
           const openLine = L.polyline(geom, {
-            color: '#38bdf8',
+            color: '#64748b',
             weight: 2,
-            opacity: 0.4,
+            opacity: 0.45,
             lineCap: 'round',
           });
+          openLine.bindPopup(popupHtml);
           roads.addLayer(openLine);
         }
       });
@@ -567,26 +626,50 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       snapping.addLayer(snapLine);
     }
 
-    // 4. Render Active Route Polyline (Google Maps-Style Glowing Neon Blue)
+    // 4. Render Active Route Polyline (Google Maps-Style Neon Cyan OR Emergency Vibrant Orange)
     if (routePolyline && routePolyline.length >= 2) {
-      const glowPoly = L.polyline(routePolyline, {
-        color: '#06b6d4',
-        weight: 9,
-        opacity: 0.4,
-        lineCap: 'round',
-        lineJoin: 'round',
-      });
+      if (isEmergencyRoute) {
+        // EMERGENCY ROUTE: Vibrant Amber/Orange with Warning Glow
+        const emergencyGlow = L.polyline(routePolyline, {
+          color: '#ea580c',
+          weight: 10,
+          opacity: 0.5,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
 
-      const corePoly = L.polyline(routePolyline, {
-        color: '#38bdf8',
-        weight: 5,
-        opacity: 0.95,
-        lineCap: 'round',
-        lineJoin: 'round',
-      });
+        const emergencyCore = L.polyline(routePolyline, {
+          color: '#f97316',
+          weight: 5.5,
+          opacity: 0.95,
+          dashArray: '8, 4',
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
 
-      route.addLayer(glowPoly);
-      route.addLayer(corePoly);
+        route.addLayer(emergencyGlow);
+        route.addLayer(emergencyCore);
+      } else {
+        // SAFE / STANDARD ROUTE: Glowing Neon Cyan
+        const glowPoly = L.polyline(routePolyline, {
+          color: '#06b6d4',
+          weight: 9,
+          opacity: 0.4,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+
+        const corePoly = L.polyline(routePolyline, {
+          color: '#38bdf8',
+          weight: 5,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+
+        route.addLayer(glowPoly);
+        route.addLayer(corePoly);
+      }
     }
 
     // 5. Render Alternative Safe Route (Emerald Green Dashed)
@@ -848,6 +931,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     nearestSnap,
     customRoads,
     blockedRoadIds,
+    roadStatusOverrides,
+    onRoadStatusChange,
+    isEmergencyRoute,
   ]);
 
   // Route Simulation / Animated Vehicle Movement

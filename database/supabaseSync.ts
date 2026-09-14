@@ -81,7 +81,7 @@ export async function syncRoadStatusToCloud(roadId: string, status: string, bloc
         ...(blocked_reason !== undefined && { blocked_reason }),
         updated_at: new Date().toISOString(),
       })
-      .or(`road_id.eq.${roadId},id.eq.${roadId}`);
+      .eq('road_id', roadId);
 
     if (error) {
       console.warn(`[Supabase Road Update] Notice for ${roadId}:`, error.message);
@@ -90,6 +90,7 @@ export async function syncRoadStatusToCloud(roadId: string, status: string, bloc
     console.warn('[Supabase Road Update] Exception handled:', err);
   }
 }
+
 
 export function subscribeToRoadChanges(onRoadChanged: (road: any) => void): () => void {
   const sb = getServerSupabase();

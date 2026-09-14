@@ -50,11 +50,11 @@ export const RoutingTestPage: React.FC = () => {
   const [lastRealtimeUpdate, setLastRealtimeUpdate] = useState<string | null>(null);
 
   // 1. Build Graph from Supabase (Single Source of Truth)
-  const loadGraph = async () => {
+  const loadGraph = async (force = false) => {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const result = await buildGraph(state?.roads && state.roads.length > 0 ? state.roads : undefined);
+      const result = await buildGraph(undefined, force);
       setGraphData(result);
 
       if (!selectedNodeId && result.graph.nodes.size > 0) {
@@ -72,7 +72,7 @@ export const RoutingTestPage: React.FC = () => {
 
   useEffect(() => {
     loadGraph();
-  }, [state?.roads]);
+  }, []);
 
   // 2. Realtime Supabase Subscription for Dynamic Road Status Updates
   useEffect(() => {
@@ -158,7 +158,7 @@ export const RoutingTestPage: React.FC = () => {
         await supabase
           .from('roads')
           .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .or(`road_id.eq.${roadId},id.eq.${roadId}`);
+          .eq('road_id', roadId);
       } catch (err) {
         console.warn('[Supabase Sync] Could not sync road update to cloud:', err);
       }
@@ -231,7 +231,7 @@ export const RoutingTestPage: React.FC = () => {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={loadGraph}
+            onClick={() => loadGraph(true)}
             disabled={loading}
             className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
           >

@@ -260,7 +260,7 @@ export const EvacuationPlannerPage: React.FC = () => {
 
               <div className="pt-2">
                 <div className="text-xs font-bold text-white mb-2">Evacuation Corridor GIS Digital Twin</div>
-                <TacticalMap height="320px" />
+                <TacticalMap height="320px" mode="planner" />
               </div>
             </div>
           ) : (

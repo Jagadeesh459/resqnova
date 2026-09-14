@@ -1,3 +1,5 @@
+export type RoadStatus = 'open' | 'restricted' | 'blocked' | 'flooded';
+
 export interface GraphNode {
   id: string;
   latitude: number;
@@ -12,7 +14,7 @@ export interface GraphEdge {
   to: string;
   distance: number; // distance in meters
   travelTime: number; // travel time in seconds
-  status: 'open' | 'blocked';
+  status: RoadStatus;
   geometry: [number, number][]; // [lat, lng] coordinates for Leaflet
   roadName?: string;
 }
@@ -38,6 +40,7 @@ export interface RouteStep {
   from: string;
   to: string;
   geometry: [number, number][];
+  status?: RoadStatus;
 }
 
 export type ManeuverType =
@@ -71,4 +74,14 @@ export interface RouteResult {
   stepSegments: RouteStep[];
   instructions: TurnInstruction[];
   startingRoadName: string;
+  startSnapDistanceMeters?: number;
+  targetSnapDistanceMeters?: number;
+
+  // Phase 4 Dynamic A* Attributes
+  routeType: 'safe' | 'restricted' | 'emergency';
+  stage: 1 | 2 | 3;
+  blockedRoadsAvoided: number;
+  restrictedRoadsUsed: number;
+  warning?: string;
+  isEmergency?: boolean;
 }

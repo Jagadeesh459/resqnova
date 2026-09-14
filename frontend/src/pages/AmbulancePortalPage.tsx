@@ -3,6 +3,7 @@ import { useResQNova } from '../context/ResQNovaContext';
 import { TacticalMap } from '../components/TacticalMap';
 import { StatusBadge } from '../components/StatusBadge';
 import { getAStarRoute } from '../lib/api';
+import { buildGraph, findShortestPath, Graph } from '../lib/routing';
 import {
   HeartPulse,
   Navigation,
@@ -22,6 +23,8 @@ import {
   PlusCircle,
   MapPin,
   Anchor,
+  Play,
+  Pause,
 } from 'lucide-react';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -99,6 +102,8 @@ export const AmbulancePortalPage: React.FC = () => {
   }, [state?.hospitals, currentMission?.latitude, currentMission?.longitude]);
 
   // Two-phase Green Corridor Routing State
+  const [graph, setGraph] = useState<Graph | null>(null);
+  const [isNavigating, setIsNavigating] = useState<boolean>(false);
   const [pickupRoute, setPickupRoute] = useState<[number, number][] | undefined>(undefined);
   const [corridorRoute, setCorridorRoute] = useState<[number, number][] | undefined>(undefined);
   const [pickupEta, setPickupEta] = useState<number | null>(null);
@@ -106,7 +111,16 @@ export const AmbulancePortalPage: React.FC = () => {
   const [pickupDist, setPickupDist] = useState<number | null>(null);
   const [corridorDist, setCorridorDist] = useState<number | null>(null);
   const [routeBlocked, setRouteBlocked] = useState<boolean>(false);
+  const [isEmergencyRoute, setIsEmergencyRoute] = useState<boolean>(false);
+  const [emergencyWarning, setEmergencyWarning] = useState<string | null>(null);
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
+
+  // Initialize graph once on mount
+  useEffect(() => {
+    buildGraph()
+      .then((res) => setGraph(res.graph))
+      .catch((err) => console.warn('[Ambulance Portal] Graph load warning:', err));
+  }, []);
 
   useEffect(() => {
     if (!amb || !currentMission) {
@@ -117,16 +131,47 @@ export const AmbulancePortalPage: React.FC = () => {
       setPickupDist(null);
       setCorridorDist(null);
       setRouteBlocked(false);
+      setIsEmergencyRoute(false);
+      setEmergencyWarning(null);
       return;
     }
 
     let isMounted = true;
     setLoadingRoutes(true);
 
-    // Leg 1: Ambulance to Patient Rendezvous
-    const leg1Promise = getAStarRoute(amb.latitude, amb.longitude, currentMission.latitude, currentMission.longitude);
+    if (graph) {
+      try {
+        const leg1 = findShortestPath(amb.latitude, amb.longitude, currentMission.latitude, currentMission.longitude, graph);
+        const leg2 = targetHospital
+          ? findShortestPath(currentMission.latitude, currentMission.longitude, targetHospital.latitude, targetHospital.longitude, graph)
+          : null;
 
-    // Leg 2: Patient Rendezvous to Trauma Hospital
+        if (leg1 && leg1.geometry && leg1.geometry.length >= 2) {
+          setPickupRoute(leg1.geometry);
+          setPickupEta(Math.max(1, Math.round(leg1.travelTimeSeconds / 60)));
+          setPickupDist(Math.round((leg1.distanceMeters / 1000) * 10) / 10);
+        }
+
+        if (leg2 && leg2.geometry && leg2.geometry.length >= 2) {
+          setCorridorRoute(leg2.geometry);
+          setCorridorEta(Math.max(1, Math.round(leg2.travelTimeSeconds / 60)));
+          setCorridorDist(Math.round((leg2.distanceMeters / 1000) * 10) / 10);
+        }
+
+        const isEmergency = leg1?.routeType === 'emergency' || leg2?.routeType === 'emergency';
+        setIsEmergencyRoute(isEmergency);
+        setEmergencyWarning(leg1?.warning || leg2?.warning || null);
+
+        setRouteBlocked(!leg1 && !leg2);
+        setLoadingRoutes(false);
+        return;
+      } catch (err) {
+        console.warn('A* ambulance route calculation error:', err);
+      }
+    }
+
+    // Fallback via getAStarRoute API
+    const leg1Promise = getAStarRoute(amb.latitude, amb.longitude, currentMission.latitude, currentMission.longitude);
     const leg2Promise = targetHospital
       ? getAStarRoute(currentMission.latitude, currentMission.longitude, targetHospital.latitude, targetHospital.longitude)
       : Promise.resolve(null);
@@ -175,6 +220,7 @@ export const AmbulancePortalPage: React.FC = () => {
       isMounted = false;
     };
   }, [
+    graph,
     amb?.id,
     amb?.latitude,
     amb?.longitude,
@@ -498,15 +544,39 @@ export const AmbulancePortalPage: React.FC = () => {
           {/* Right 6 Cols: Tactical Navigation Map */}
           <div className="lg:col-span-6 space-y-4">
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Navigation className="h-4 w-4 text-orange-400" />
                   Green Corridor Navigation & Hospital Approach
                 </h3>
-                {loadingRoutes && (
-                  <span className="text-[11px] text-orange-400 animate-pulse">Calculating corridor...</span>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsNavigating(!isNavigating)}
+                    disabled={!pickupRoute && !corridorRoute}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
+                      isNavigating
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                        : 'bg-orange-600 hover:bg-orange-500 text-white'
+                    }`}
+                  >
+                    {isNavigating ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    <span>{isNavigating ? 'Pause 108 Sirens' : 'Start 108 Live Navigation'}</span>
+                  </button>
+                  {loadingRoutes && (
+                    <span className="text-[11px] text-orange-400 animate-pulse">Calculating...</span>
+                  )}
+                </div>
               </div>
+
+              {/* Emergency Fallback Warning */}
+              {emergencyWarning && (
+                <div className="p-3 rounded-xl bg-orange-950/80 border border-orange-500/80 text-orange-200 text-xs flex items-center gap-2 shadow-sm animate-pulse">
+                  <ShieldAlert className="h-4 w-4 text-orange-400 shrink-0" />
+                  <span>
+                    <b>Emergency Corridor Active:</b> {emergencyWarning}
+                  </span>
+                </div>
+              )}
 
               {/* Corridor status alert */}
               {routeBlocked && (
@@ -546,6 +616,7 @@ export const AmbulancePortalPage: React.FC = () => {
 
               <TacticalMap
                 height="450px"
+                mode="ambulance"
                 focusCoords={
                   currentMission
                     ? [currentMission.latitude, currentMission.longitude]
@@ -553,7 +624,12 @@ export const AmbulancePortalPage: React.FC = () => {
                 }
                 routePolyline={currentMission?.ambulance_reached ? corridorRoute : pickupRoute}
                 alternativePolyline={currentMission?.ambulance_reached ? undefined : corridorRoute}
+                isEmergencyRoute={isEmergencyRoute}
+                isSimulatingRoute={isNavigating}
+                simulationSpeed={3}
+                vehicleType="ambulance"
               />
+
             </div>
           </div>
         </div>

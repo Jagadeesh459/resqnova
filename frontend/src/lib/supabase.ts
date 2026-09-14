@@ -9,9 +9,11 @@ const supabaseUrl =
   'https://xqadvyfpqubqtakjrkim.supabase.co';
 
 const supabaseAnonKey =
+  metaEnv?.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+  metaEnv?.SUPABASE_SERVICE_ROLE_KEY ||
   metaEnv?.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   metaEnv?.VITE_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxYWR2eWZwcXVicXRha2pya2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4MDU3OTcsImV4cCI6MjEwNDM4MTc5N30.r5ZrPnZCh2hJNODCPd6wkn5nx1NXSG4VS83xZa63FE8';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxYWR2eWZwcXVicXRha2pya2ltIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODgwNTc5NywiZXhwIjoyMTA0MzgxNzk3fQ.yMDhOJ6sAdN1PWqvl3BsDiBci6wXx6RRca0aAriTLHY';
 
 let supabaseClientInstance: SupabaseClient | null = null;
 

@@ -538,6 +538,7 @@ export const RescueTeamPortalPage: React.FC = () => {
 
               <TacticalMap
                 height="450px"
+                mode="rescue"
                 focusCoords={
                   currentMission
                     ? [currentMission.latitude, currentMission.longitude]
@@ -545,6 +546,7 @@ export const RescueTeamPortalPage: React.FC = () => {
                 }
                 routePolyline={routeCoordinates}
               />
+
             </div>
           </div>
         </div>

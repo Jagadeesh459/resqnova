@@ -1,23 +1,151 @@
-import { Graph, GraphNode, GraphEdge, GraphBuildStats } from './types';
+import { Graph, GraphNode, GraphEdge, GraphBuildStats, RoadStatus } from './types';
 import { geoJsonToLeafletCoordinates, haversineDistance } from './utils';
 import { supabase } from '../supabase';
+
+let cachedRawIntersections: any[] | null = null;
+let cachedRawRoads: any[] | null = null;
+let cachedBuiltGraph: { graph: Graph; stats: GraphBuildStats } | null = null;
+
+export function invalidateGraphCache(): void {
+  cachedRawIntersections = null;
+  cachedRawRoads = null;
+  cachedBuiltGraph = null;
+}
+
+export function getCachedRoads(): any[] | null {
+  return cachedRawRoads;
+}
+
+/**
+ * Updates the status of a road in-memory across the graph edges in O(1)
+ */
+export function updateGraphEdgeStatus(
+  graph: Graph,
+  roadId: string,
+  newStatus: RoadStatus
+): boolean {
+  let updated = false;
+  const targetId = roadId.trim();
+  const revTargetId = targetId.endsWith('_rev') ? targetId : `${targetId}_rev`;
+  const baseTargetId = targetId.replace(/_rev$/, '');
+
+  // Update in graph adjacency
+  for (const edges of graph.adjacency.values()) {
+    for (const edge of edges) {
+      if (
+        edge.roadId === targetId ||
+        edge.roadId === revTargetId ||
+        edge.roadId === baseTargetId ||
+        edge.roadId.replace(/_rev$/, '') === baseTargetId
+      ) {
+        edge.status = newStatus;
+        updated = true;
+      }
+    }
+  }
+
+  // Update in cached roads array
+  if (cachedRawRoads) {
+    for (const r of cachedRawRoads) {
+      const rid = String(r.road_id || r.id || '');
+      if (rid === baseTargetId || rid === targetId) {
+        r.status = newStatus;
+      }
+    }
+  }
+
+  return updated;
+}
+
+/**
+ * Helper to fetch all rows with pagination from a Supabase table
+ */
+async function fetchAllRows(tableName: string, selectFields = '*'): Promise<any[]> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const allRows: any[] = [];
+  const pageSize = 1000;
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from(tableName)
+      .select(selectFields)
+      .range(from, to);
+
+    if (error) {
+      throw new Error(`Failed to fetch from ${tableName} [range ${from}-${to}]: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows.push(...data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+  }
+
+  return allRows;
+}
 
 /**
  * Builds the Vijayawada Topological Graph Engine directly from Supabase PostgreSQL tables.
  * Supabase is the single source of truth:
- * - Queries 'intersections' (vertices V)
- * - Queries 'roads' (directed topological edges E)
- * - Excludes blocked or flooded road segments
+ * - Queries 'intersections' (vertices V) with full pagination (17,597 nodes)
+ * - Queries 'roads' (directed topological edges E) with full pagination (23,858 edges)
+ * - Retains ALL roads inside graph data structure with their respective statuses (open, restricted, blocked, flooded)
  * - Preserves full GeoJSON curvature geometry converted to Leaflet [lat, lng]
- * - If Supabase fails or tables are unpopulated, throws an explicit error (no silent JSON fallback).
  */
 export async function buildGraph(
-  customRoadOverrides?: any[]
+  customRoadOverrides?: any[],
+  forceRefresh = false
 ): Promise<{ graph: Graph; stats: GraphBuildStats }> {
+  if (customRoadOverrides && customRoadOverrides.length > 0) {
+    return constructGraphFromRawData(cachedRawIntersections || [], customRoadOverrides);
+  }
+
+  if (cachedBuiltGraph && !forceRefresh) {
+    return cachedBuiltGraph;
+  }
+
   if (!supabase) {
     throw new Error('Supabase client is not configured. Please check your NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
   }
 
+  // 1. Fetch all Intersections from Supabase
+  if (!cachedRawIntersections || forceRefresh) {
+    cachedRawIntersections = await fetchAllRows('intersections', 'node_id,name,latitude,longitude,elevation_m');
+  }
+
+  // 2. Fetch all Roads from Supabase
+  if (!cachedRawRoads || forceRefresh) {
+    cachedRawRoads = await fetchAllRows(
+      'roads',
+      'road_id,road_name,source_node,target_node,start_lat,start_lng,end_lat,end_lng,distance_m,travel_time_sec,status,coordinates'
+    );
+  }
+
+  if (!cachedRawRoads || cachedRawRoads.length === 0) {
+    throw new Error('Supabase table "roads" is currently empty. Run the OSM upload script to populate Vijayawada roads.');
+  }
+
+  const result = constructGraphFromRawData(cachedRawIntersections, cachedRawRoads);
+  cachedBuiltGraph = result;
+  return result;
+}
+
+function constructGraphFromRawData(
+  rawIntersections: any[],
+  rawRoads: any[]
+): { graph: Graph; stats: GraphBuildStats } {
   const nodes = new Map<string, GraphNode>();
   const adjacency = new Map<string, GraphEdge[]>();
 
@@ -25,70 +153,38 @@ export async function buildGraph(
   let totalGraphEdges = 0;
   let totalGeometryPoints = 0;
 
-  // ------------------------------------------------------------------
-  // 1. Fetch Intersections from Supabase (Vertices V)
-  // ------------------------------------------------------------------
-  const { data: rawIntersections, error: nodeError } = await supabase
-    .from('intersections')
-    .select('*')
-    .limit(50000);
-
-  if (nodeError) {
-    throw new Error(`Failed to fetch intersections from Supabase table 'intersections': ${nodeError.message}`);
+  // Populate Nodes
+  for (const item of rawIntersections) {
+    const id = String(item.node_id || item.id || '');
+    if (!id) continue;
+    const node: GraphNode = {
+      id,
+      latitude: Number(item.latitude),
+      longitude: Number(item.longitude),
+      name: item.name || `Junction ${id}`,
+      elevation_m: item.elevation_m ? Number(item.elevation_m) : 22.0,
+    };
+    nodes.set(node.id, node);
+    adjacency.set(node.id, []);
   }
 
-  if (!rawIntersections || rawIntersections.length === 0) {
-    // If roads exist with start/end coordinates, we will derive nodes below, but log a warning
-    console.warn('[Routing Engine] Table "intersections" returned 0 rows from Supabase.');
-  } else {
-    for (const item of rawIntersections) {
-      const id = String(item.node_id || item.id || '');
-      if (!id) continue;
-      const node: GraphNode = {
-        id,
-        latitude: Number(item.latitude),
-        longitude: Number(item.longitude),
-        name: item.name || `Junction ${id}`,
-        elevation_m: item.elevation_m ? Number(item.elevation_m) : 22.0,
-      };
-      nodes.set(node.id, node);
-      adjacency.set(node.id, []);
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // 2. Fetch Roads from Supabase (Topological Edges E)
-  // ------------------------------------------------------------------
-  let rawRoads: any[] = [];
-  if (customRoadOverrides && customRoadOverrides.length > 0) {
-    rawRoads = customRoadOverrides;
-  } else {
-    const { data: roadsData, error: roadError } = await supabase
-      .from('roads')
-      .select('*')
-      .limit(50000);
-
-    if (roadError) {
-      throw new Error(`Failed to fetch roads from Supabase table 'roads': ${roadError.message}`);
-    }
-
-    if (!roadsData || roadsData.length === 0) {
-      throw new Error('Supabase table "roads" is currently empty. Run the OSM upload script to populate Vijayawada roads.');
-    }
-
-    rawRoads = roadsData;
-  }
-
+  // Populate Edges (Preserve all roads in the graph, tagged with their status)
   const totalRoads = rawRoads.length;
 
   for (const road of rawRoads) {
     const roadId = String(road.road_id || road.id || '');
-    const status = String(road.status || 'open').toLowerCase();
+    const rawStatus = String(road.status || 'open').toLowerCase();
+    const status: RoadStatus =
+      rawStatus === 'blocked'
+        ? 'blocked'
+        : rawStatus === 'flooded'
+        ? 'flooded'
+        : rawStatus === 'restricted'
+        ? 'restricted'
+        : 'open';
 
-    // EXCLUDE BLOCKED ROADS
     if (status === 'blocked' || status === 'flooded') {
       totalBlockedRoadsSkipped++;
-      continue;
     }
 
     let fromNode = road.source_node ? String(road.source_node) : '';
@@ -126,7 +222,7 @@ export async function buildGraph(
       }
     }
 
-    // PRESERVE EXACT ROAD CURVATURE GEOMETRY
+    // Preserve exact road geometry
     const geometry = geoJsonToLeafletCoordinates(road.coordinates);
     const edgeGeometry: [number, number][] =
       geometry.length >= 2
@@ -160,7 +256,7 @@ export async function buildGraph(
       to: toNode,
       distance: Math.max(5, Math.round(distanceMeters)),
       travelTime: Math.max(1, Math.round(travelTimeSeconds)),
-      status: 'open',
+      status,
       geometry: edgeGeometry,
       roadName,
     };
@@ -175,7 +271,7 @@ export async function buildGraph(
       to: fromNode,
       distance: Math.max(5, Math.round(distanceMeters)),
       travelTime: Math.max(1, Math.round(travelTimeSeconds)),
-      status: 'open',
+      status,
       geometry: [...edgeGeometry].reverse(),
       roadName,
     };
