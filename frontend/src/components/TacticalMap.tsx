@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useResQNova } from '../context/ResQNovaContext';
 import {
   Layers,
@@ -11,39 +12,84 @@ import {
   Activity,
   ShieldCheck,
   Zap,
+  Maximize2,
+  Minimize2,
+  Navigation,
+  MapPin,
+  Crosshair,
+  Radio,
 } from 'lucide-react';
 import { DynamicRoutingModal } from './DynamicRoutingModal';
+import { geoJsonToLeafletCoordinates } from '../lib/routing/utils';
 
-interface TacticalMapProps {
+export type TacticalMapMode =
+  | 'dashboard'
+  | 'citizen'
+  | 'ambulance'
+  | 'rescue'
+  | 'routing-demo'
+  | 'routing-test'
+  | 'planner';
+
+export type MapTileStyle = 'tf-transport' | 'tf-outdoors' | 'tf-landscape' | 'osm-standard' | 'osm-hot';
+
+export interface TacticalMapProps {
   height?: string;
+  mode?: TacticalMapMode;
   focusCoords?: [number, number];
   routePolyline?: [number, number][];
   alternativePolyline?: [number, number][];
   onSelectRequest?: (id: string) => void;
   className?: string;
   showDynamicCorridorsDefault?: boolean;
-  showQuantumDispatchDefault?: boolean;
-  showQuantumEvacDefault?: boolean;
   minimalCitizenMode?: boolean;
   sosActive?: boolean;
   citizenSource?: { lat: number; lng: number; label: string; address?: string; isSosActive?: boolean };
   citizenDestination?: { lat: number; lng: number; label: string; availableBeds?: number; address?: string };
   bypassWarning?: string;
+
+  // Interactive Routing & Snapping props
+  startPoint?: { lat: number; lng: number; label?: string };
+  endPoint?: { lat: number; lng: number; label?: string };
+  onMapClick?: (lat: number, lng: number, e: L.LeafletMouseEvent) => void;
+  selectedNodeId?: string;
+  selectedNodeEdges?: any[];
+  nearestSnap?: {
+    clickLat: number;
+    clickLng: number;
+    nodeLat: number;
+    nodeLng: number;
+    nodeId: string;
+    distanceMeters: number;
+  } | null;
+
+  // Custom Road Overrides (e.g. from graph inspector)
+  customRoads?: any[];
+  blockedRoadIds?: Set<string>;
 }
 
-type MapTileStyle = 'tf-transport' | 'tf-outdoors' | 'tf-landscape' | 'carto-dark' | 'carto-voyager';
-
-// In-memory cache for OSRM road geometry
+// In-memory cache for OSRM / GeoJSON road geometry
 const roadGeometryCache = new Map<string, [number, number][]>();
 
 async function getRoadGeometry(
-  road: { id?: string; road_id?: string; start_lat?: number; start_lng?: number; end_lat?: number; end_lng?: number },
+  road: { id?: string; road_id?: string; start_lat?: number; start_lng?: number; end_lat?: number; end_lng?: number; coordinates?: any },
   signal: AbortSignal
 ): Promise<{ id: string; geometry: [number, number][] } | null> {
   const roadId = road.road_id || road.id || '';
-  if (!roadId || road.start_lat == null || road.start_lng == null || road.end_lat == null || road.end_lng == null) {
+  if (!roadId) return null;
+
+  // 1. If road already has valid GeoJSON coordinates from Supabase, use them directly (0 latency!)
+  if (road.coordinates) {
+    const coords = geoJsonToLeafletCoordinates(road.coordinates);
+    if (coords && coords.length >= 2) {
+      return { id: roadId, geometry: coords };
+    }
+  }
+
+  if (road.start_lat == null || road.start_lng == null || road.end_lat == null || road.end_lng == null) {
     return null;
   }
+
   const key = `${road.start_lat},${road.start_lng}:${road.end_lat},${road.end_lng}`;
   const cached = roadGeometryCache.get(key);
   if (cached) return { id: roadId, geometry: cached };
@@ -63,10 +109,9 @@ async function getRoadGeometry(
     const coordinates = payload.routes?.[0]?.geometry?.coordinates;
     if (!coordinates || coordinates.length < 2) return null;
 
-    // Convert GeoJSON [lng, lat] to Leaflet [lat, lng]
     const geometry: [number, number][] = coordinates.map(([lng, lat]: [number, number]) => [lat, lng]);
     roadGeometryCache.set(key, geometry);
-    return { id: road.id, geometry };
+    return { id: roadId, geometry };
   } catch {
     return null;
   }
@@ -74,6 +119,7 @@ async function getRoadGeometry(
 
 export const TacticalMap: React.FC<TacticalMapProps> = ({
   height = '480px',
+  mode = 'dashboard',
   focusCoords,
   routePolyline,
   alternativePolyline,
@@ -85,19 +131,31 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   citizenSource,
   citizenDestination,
   bypassWarning,
+  startPoint,
+  endPoint,
+  onMapClick,
+  selectedNodeId,
+  selectedNodeEdges,
+  nearestSnap,
+  customRoads,
+  blockedRoadIds,
 }) => {
   const { state } = useResQNova();
+  const rootContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const baseTileLayerRef = useRef<L.TileLayer | null>(null);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeTileStyle, setActiveTileStyle] = useState<MapTileStyle>('tf-transport');
+  const [roadGeometries, setRoadGeometries] = useState<Record<string, [number, number][]>>({});
+  const [showLayerPanel, setShowLayerPanel] = useState(false);
+  const [showRoutingModal, setShowRoutingModal] = useState(false);
 
   const thunderforestApiKey =
     (typeof import.meta !== 'undefined' &&
       ((import.meta as any).env?.NEXT_PUBLIC_THUNDERFOREST_API_KEY || (import.meta as any).env?.VITE_THUNDERFOREST_API_KEY)) ||
     '7d071cff43f04a768bc32368bce332cd';
-
-  const [activeTileStyle, setActiveTileStyle] = useState<MapTileStyle>('tf-transport');
-  const [roadGeometries, setRoadGeometries] = useState<Record<string, [number, number][]>>({});
 
   // Layer groups refs
   const layerGroupsRef = useRef<{
@@ -113,27 +171,86 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     route: L.LayerGroup;
     alternativeRoute: L.LayerGroup;
     dynamicCorridors: L.LayerGroup;
+    endpoints: L.LayerGroup;
+    snapping: L.LayerGroup;
   } | null>(null);
 
-  // Layer visibility toggles
-  const [layersVisible, setLayersVisible] = useState({
-    sos: true,
-    rescue: true,
-    ambulances: true,
-    shelters: true,
-    hospitals: true,
-    roads: true,
-    riskZones: true,
-    aiFloodZones: true,
-    strategicStaging: true,
-    dynamicCorridors: showDynamicCorridorsDefault,
+  // Initialize Layer Visibility according to portal mode
+  const [layersVisible, setLayersVisible] = useState(() => {
+    switch (mode) {
+      case 'citizen':
+        return {
+          sos: true,
+          rescue: false,
+          ambulances: false,
+          shelters: true,
+          hospitals: true,
+          roads: true,
+          riskZones: true,
+          aiFloodZones: true,
+          strategicStaging: false,
+          dynamicCorridors: false,
+        };
+      case 'ambulance':
+        return {
+          sos: true,
+          rescue: false,
+          ambulances: true,
+          shelters: false,
+          hospitals: true,
+          roads: true,
+          riskZones: true,
+          aiFloodZones: false,
+          strategicStaging: false,
+          dynamicCorridors: true,
+        };
+      case 'rescue':
+        return {
+          sos: true,
+          rescue: true,
+          ambulances: false,
+          shelters: true,
+          hospitals: false,
+          roads: true,
+          riskZones: true,
+          aiFloodZones: true,
+          strategicStaging: true,
+          dynamicCorridors: true,
+        };
+      case 'routing-demo':
+      case 'routing-test':
+        return {
+          sos: false,
+          rescue: false,
+          ambulances: false,
+          shelters: false,
+          hospitals: false,
+          roads: true,
+          riskZones: false,
+          aiFloodZones: false,
+          strategicStaging: false,
+          dynamicCorridors: false,
+        };
+      case 'dashboard':
+      case 'planner':
+      default:
+        return {
+          sos: true,
+          rescue: true,
+          ambulances: true,
+          shelters: true,
+          hospitals: true,
+          roads: true,
+          riskZones: true,
+          aiFloodZones: true,
+          strategicStaging: true,
+          dynamicCorridors: showDynamicCorridorsDefault,
+        };
+    }
   });
 
-  const [showLayerPanel, setShowLayerPanel] = useState(false);
-  const [showRoutingModal, setShowRoutingModal] = useState(false);
-
-  // Create base tile layer according to style
-  const createBaseLayer = (style: MapTileStyle): L.TileLayer => {
+  // Base Tile Layer Creator (Removed CARTO, Standardized to Thunderforest + OSM)
+  const createBaseLayer = useCallback((style: MapTileStyle): L.TileLayer => {
     if (thunderforestApiKey && style.startsWith('tf-')) {
       const tfName = style.replace('tf-', '');
       return L.tileLayer(
@@ -147,26 +264,55 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       );
     }
 
-    if (style === 'carto-dark') {
-      return L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        {
-          attribution: '&copy; CARTO &copy; OpenStreetMap',
-          maxZoom: 19,
-        }
-      );
+    if (style === 'osm-hot') {
+      return L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors, Humanitarian OpenStreetMap Team',
+        maxZoom: 19,
+      });
     }
 
-    return L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        maxZoom: 19,
-      }
-    );
+    // Default: OpenStreetMap Standard
+    return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    });
+  }, [thunderforestApiKey]);
+
+  // Handle Fullscreen Toggle
+  const toggleFullscreen = () => {
+    if (!rootContainerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      rootContainerRef.current.requestFullscreen?.().then(() => {
+        setIsFullscreen(true);
+      }).catch(() => {
+        setIsFullscreen((prev) => !prev);
+      });
+    } else {
+      document.exitFullscreen?.().then(() => {
+        setIsFullscreen(false);
+      }).catch(() => {
+        setIsFullscreen(false);
+      });
+    }
   };
 
-  // Switch Tile Layer when activeTileStyle changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = Boolean(document.fullscreenElement);
+      setIsFullscreen(isFs);
+      setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 150);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Switch Tile Layer when style changes
   useEffect(() => {
     if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
@@ -178,17 +324,18 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const newLayer = createBaseLayer(activeTileStyle);
     newLayer.addTo(map);
     baseTileLayerRef.current = newLayer;
-  }, [activeTileStyle]);
+  }, [activeTileStyle, createBaseLayer]);
 
-  // Fetch real road geometries from OSRM
+  // Extract / Cache road geometries
   useEffect(() => {
-    if (!state?.roads) return;
+    const roadsToProcess = customRoads || state?.roads || [];
+    if (roadsToProcess.length === 0) return;
 
     const controller = new AbortController();
     let isMounted = true;
 
     Promise.all(
-      state.roads.map((road) => getRoadGeometry(road, controller.signal).catch(() => null))
+      roadsToProcess.map((road) => getRoadGeometry(road, controller.signal).catch(() => null))
     ).then((results) => {
       if (!isMounted) return;
       const geomMap: Record<string, [number, number][]> = {};
@@ -204,14 +351,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       isMounted = false;
       controller.abort();
     };
-  }, [state?.roads]);
+  }, [state?.roads, customRoads]);
 
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [16.5062, 80.648],
+      center: [16.5062, 80.648], // Central Vijayawada
       zoom: 13,
       zoomControl: false,
     });
@@ -223,33 +370,29 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     baseTileLayerRef.current = initialBaseLayer;
 
     // Layer groups
-    const sosGroup = L.layerGroup().addTo(map);
-    const rescueGroup = L.layerGroup().addTo(map);
-    const ambulancesGroup = L.layerGroup().addTo(map);
-    const sheltersGroup = L.layerGroup().addTo(map);
-    const hospitalsGroup = L.layerGroup().addTo(map);
-    const roadsGroup = L.layerGroup().addTo(map);
-    const riskZonesGroup = L.layerGroup().addTo(map);
-    const aiFloodZonesGroup = L.layerGroup().addTo(map);
-    const strategicStagingGroup = L.layerGroup().addTo(map);
-    const routeGroup = L.layerGroup().addTo(map);
-    const alternativeRouteGroup = L.layerGroup().addTo(map);
-    const dynamicCorridorsGroup = L.layerGroup().addTo(map);
-
     layerGroupsRef.current = {
-      sos: sosGroup,
-      rescue: rescueGroup,
-      ambulances: ambulancesGroup,
-      shelters: sheltersGroup,
-      hospitals: hospitalsGroup,
-      roads: roadsGroup,
-      riskZones: riskZonesGroup,
-      aiFloodZones: aiFloodZonesGroup,
-      strategicStaging: strategicStagingGroup,
-      route: routeGroup,
-      alternativeRoute: alternativeRouteGroup,
-      dynamicCorridors: dynamicCorridorsGroup,
+      sos: L.layerGroup().addTo(map),
+      rescue: L.layerGroup().addTo(map),
+      ambulances: L.layerGroup().addTo(map),
+      shelters: L.layerGroup().addTo(map),
+      hospitals: L.layerGroup().addTo(map),
+      roads: L.layerGroup().addTo(map),
+      riskZones: L.layerGroup().addTo(map),
+      aiFloodZones: L.layerGroup().addTo(map),
+      strategicStaging: L.layerGroup().addTo(map),
+      route: L.layerGroup().addTo(map),
+      alternativeRoute: L.layerGroup().addTo(map),
+      dynamicCorridors: L.layerGroup().addTo(map),
+      endpoints: L.layerGroup().addTo(map),
+      snapping: L.layerGroup().addTo(map),
     };
+
+    // Attach click listener
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (onMapClick) {
+        onMapClick(Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6)), e);
+      }
+    });
 
     mapInstanceRef.current = map;
 
@@ -257,9 +400,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, []);
+  }, [createBaseLayer, onMapClick]);
 
-  // Update Layers when State changes
+  // Render Dynamic GIS Layers
   useEffect(() => {
     if (!mapInstanceRef.current || !layerGroupsRef.current || !state) return;
 
@@ -275,9 +418,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       strategicStaging,
       route,
       alternativeRoute,
-      dynamicCorridors,
+      endpoints,
+      snapping,
     } = layerGroupsRef.current;
 
+    // Clear all layers
     sos.clearLayers();
     rescue.clearLayers();
     ambulances.clearLayers();
@@ -289,242 +434,256 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     strategicStaging.clearLayers();
     route.clearLayers();
     alternativeRoute.clearLayers();
-    dynamicCorridors.clearLayers();
+    endpoints.clearLayers();
+    snapping.clearLayers();
 
-    // -------------------------------------------------------------
-    // CITIZEN MODE: SOURCE, DESTINATION & VERIFIED SAFE PATH
-    // -------------------------------------------------------------
-    if (minimalCitizenMode) {
-      const boundsCoords: [number, number][] = [];
+    const activeRoadList = customRoads || state.roads || [];
 
-      if (citizenSource) {
-        boundsCoords.push([citizenSource.lat, citizenSource.lng]);
-        const sourceIcon = L.divIcon({
-          html: `
-            <div style="position:relative; width:44px; height:44px; display:flex; align-items:center; justify-content:center;">
-              <div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:#ef4444; opacity:0.7; animation:ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-              <div style="position:relative; background-color:#dc2626; color:white; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:3px solid white; font-weight:bold; font-size:16px; box-shadow:0 4px 12px rgba(220,38,38,0.7);">
-                📍
-              </div>
-            </div>
-          `,
-          className: '',
-          iconSize: [44, 44],
-          iconAnchor: [22, 22],
-        });
-
-        const sourceMarker = L.marker([citizenSource.lat, citizenSource.lng], { icon: sourceIcon });
-        sourceMarker.bindPopup(`
-          <div class="p-2 text-slate-900 text-xs font-sans min-w-[200px]">
-            <div class="font-bold text-sm text-red-600">📍 YOUR DISTRESS LOCATION</div>
-            <div class="font-semibold mt-1 text-slate-800">${citizenSource.label}</div>
-            ${citizenSource.address ? `<div class="text-slate-600 text-[11px] mt-0.5">${citizenSource.address}</div>` : ''}
-            <div class="mt-2 text-[10px] text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200 font-semibold">
-              ✓ Active Signal Registered
-            </div>
-          </div>
-        `);
-        sos.addLayer(sourceMarker);
-      }
-
-      if (citizenDestination) {
-        boundsCoords.push([citizenDestination.lat, citizenDestination.lng]);
-        const destIcon = L.divIcon({
-          html: `
-            <div style="position:relative; width:46px; height:46px; display:flex; align-items:center; justify-content:center;">
-              <div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:#10b981; opacity:0.5; animation:ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-              <div style="position:relative; background-color:#059669; color:white; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:3px solid white; font-weight:bold; font-size:18px; box-shadow:0 4px 14px rgba(16,185,129,0.7);">
-                🛡️
-              </div>
-            </div>
-          `,
-          className: '',
-          iconSize: [46, 46],
-          iconAnchor: [23, 23],
-        });
-
-        const destMarker = L.marker([citizenDestination.lat, citizenDestination.lng], { icon: destIcon });
-        destMarker.bindPopup(`
-          <div class="p-2 text-slate-900 text-xs font-sans min-w-[220px]">
-            <div class="font-bold text-sm text-emerald-700">🛡️ NEAREST SAFE RELIEF SHELTER</div>
-            <div class="font-semibold mt-1 text-slate-800 text-sm">${citizenDestination.label}</div>
-            ${citizenDestination.address ? `<div class="text-slate-600 text-[11px] mt-0.5">${citizenDestination.address}</div>` : ''}
-            <div class="mt-2 p-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] flex justify-between font-semibold">
-              <span>Available Capacity:</span>
-              <span class="text-emerald-950 font-bold">${citizenDestination.availableBeds ?? 1420} Beds</span>
-            </div>
-            <div class="mt-1 text-[10px] text-slate-500">Food, Drinking Water & Paramedics Standby</div>
-          </div>
-        `);
-        shelters.addLayer(destMarker);
-      }
-
-      if (routePolyline && routePolyline.length >= 2) {
-        boundsCoords.push(...routePolyline);
-
-        const glowLine = L.polyline(routePolyline, {
-          color: '#34d399',
-          weight: 9,
-          opacity: 0.5,
-          lineCap: 'round',
-        });
-
-        const coreLine = L.polyline(routePolyline, {
-          color: '#059669',
-          weight: 5,
-          opacity: 0.95,
-          dashArray: '8, 6',
-          lineCap: 'round',
-        });
-
-        route.addLayer(glowLine);
-        route.addLayer(coreLine);
-      }
-
-      // Render Blocked / Flooded Roads in RED so citizen visually identifies hazards to avoid
-      state.roads.forEach((road) => {
-        const isBlocked = road.status === 'blocked' || road.status === 'flooded';
-        if (!isBlocked) return;
-
-        const geom = roadGeometries[road.id];
-        if (!geom || geom.length < 2) return;
-
-        boundsCoords.push(...geom);
-
-        const blockedLine = L.polyline(geom, {
-          color: '#ef4444',
-          weight: 6,
-          opacity: 0.95,
-          lineCap: 'round',
-          lineJoin: 'round',
-        });
-
-        blockedLine.bindPopup(`
-          <div class="p-2 text-slate-900 text-xs font-sans min-w-[200px]">
-            <div class="font-bold text-sm text-red-600">🚫 ROAD BLOCKED / SUBMERGED</div>
-            <div class="font-bold mt-1 text-slate-800">${road.road_name || (road as any).name || 'Flooded Arterial'}</div>
-            <div class="text-red-600 text-[11px] font-semibold mt-1">${road.blocked_reason || 'Inundated by floodwaters'}</div>
-            <div class="mt-2 text-[10px] text-emerald-800 bg-emerald-50 p-1.5 rounded border border-emerald-200 font-bold">
-              ✓ Citizen Evacuation Route Safely Bypasses This Zone
-            </div>
-          </div>
-        `);
-
-        roads.addLayer(blockedLine);
-      });
-
-      // Render active pulsating SOS Beacon radar wave
-      if (citizenSource && (sosActive || citizenSource.isSosActive)) {
-        const radarCircle = L.circle([citizenSource.lat, citizenSource.lng], {
-          radius: 140,
-          color: '#ef4444',
-          fillColor: '#ef4444',
-          fillOpacity: 0.25,
-          weight: 2,
-          dashArray: '4, 4',
-        });
-        sos.addLayer(radarCircle);
-      }
-
-      if (boundsCoords.length >= 2 && mapInstanceRef.current) {
-        try {
-          mapInstanceRef.current.fitBounds(L.latLngBounds(boundsCoords), {
-            padding: [50, 50],
-            maxZoom: 16,
-          });
-        } catch {}
-      }
-
-      return;
-    }
-
-    // -------------------------------------------------------------
-    // FULL TACTICAL GIS MODE
-    // -------------------------------------------------------------
-
-    // 1. Render Risk Zones
-    if (layersVisible.riskZones) {
-      state.risk_zones.forEach((zone) => {
-        const color =
-          zone.risk_level === 'Critical'
-            ? '#ef4444'
-            : zone.risk_level === 'Severe'
-            ? '#f97316'
-            : '#eab308';
-
-        const polygon = L.polygon(zone.polygon, {
-          color,
-          weight: 2,
-          fillColor: color,
-          fillOpacity: 0.25,
-          dashArray: '4, 4',
-        });
-
-        polygon.bindPopup(`
-          <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
-            <div class="font-bold text-sm text-red-600">${zone.zone_name}</div>
-            <div class="mt-1">Risk Level: <b>${zone.risk_level}</b> (${zone.risk_score}/100)</div>
-            <div>Inundation Level: <b>${zone.water_level_m} meters</b></div>
-            <div class="text-[10px] text-slate-500 mt-1">Krishna River Basin Flood Sector</div>
-          </div>
-        `);
-        riskZones.addLayer(polygon);
-      });
-    }
-
-    // 2. Render Roads via OSRM real geometry (Phase 11: Tactical GIS Legend)
-    // - Active Primary Route: #06B6D4 (Cyan), 4px width
-    // - Safe Alternative: #10B981 (Emerald), 3px dashed
-    // - Blocked / Flooded: #EF4444 (Red), 5px solid with danger crosses
-    // - Restricted Corridor: #F59E0B (Amber), 3px dotted
+    // 1. Render Roads with High-Resolution Curvature Geometry
     if (layersVisible.roads) {
-      state.roads.forEach((road) => {
-        const isBlocked = road.status === 'blocked' || road.status === 'flooded';
+      activeRoadList.forEach((road) => {
+        const roadId = road.road_id || road.id || '';
+        const isBlocked =
+          (blockedRoadIds && blockedRoadIds.has(roadId)) ||
+          road.status === 'blocked' ||
+          road.status === 'flooded';
         const isRestricted = (road.status as string) === 'restricted';
-        const color = isBlocked ? '#EF4444' : isRestricted ? '#F59E0B' : '#10B981';
 
-        const geom = roadGeometries[road.id];
-        if (!geom || geom.length < 2) {
-          // Roads without valid routing geometry are hidden instead of drawing fake straight lines
-          return;
+        // Retrieve full coordinates from cache or direct GeoJSON
+        let geom = roadGeometries[roadId] || roadGeometries[road.id];
+        if (!geom && road.coordinates) {
+          geom = geoJsonToLeafletCoordinates(road.coordinates);
         }
 
-        const polyline = L.polyline(geom, {
-          color,
-          weight: isBlocked ? 5 : isRestricted ? 3 : 3,
-          dashArray: isBlocked ? undefined : isRestricted ? '3, 6' : undefined,
-          opacity: isBlocked ? 0.95 : 0.85,
-          lineCap: 'round',
-          lineJoin: 'round',
-        });
+        if (!geom || geom.length < 2) return;
 
-        polyline.bindPopup(`
-          <div class="p-1.5 text-slate-900 text-xs font-sans leading-tight">
-            <div class="font-bold text-sm ${isBlocked ? 'text-red-600' : isRestricted ? 'text-amber-600' : 'text-emerald-700'}">
-              ${road.road_name || (road as any).name || 'Urban Corridor'}
+        if (isBlocked) {
+          // Blocked Road: Glowing Red Border + Thick Red Dashed Line
+          const glowLine = L.polyline(geom, {
+            color: '#dc2626',
+            weight: 8,
+            opacity: 0.4,
+            lineCap: 'round',
+          });
+
+          const dashedLine = L.polyline(geom, {
+            color: '#ef4444',
+            weight: 4,
+            opacity: 0.95,
+            dashArray: '6, 6',
+            lineCap: 'round',
+          });
+
+          dashedLine.bindPopup(`
+            <div class="p-2 text-slate-900 text-xs font-sans min-w-[200px]">
+              <div class="font-bold text-sm text-red-600">🚫 ROAD BLOCKED / INUNDATED</div>
+              <div class="font-bold mt-1 text-slate-800">${road.road_name || roadId}</div>
+              <div class="text-red-600 text-[11px] font-semibold mt-1">${road.blocked_reason || 'Submerged by urban floodwaters'}</div>
+              <div class="mt-1 text-[10px] text-slate-500 font-mono">Excluded from A* & D* Lite graph</div>
             </div>
-            <div class="mt-1">Status: <b class="uppercase">${road.status}</b></div>
-            <div>Travel Time: <b>${road.travel_time ? `${road.travel_time} min` : '--'}</b></div>
-            <div>Flood Risk Score: <b>${road.risk_score}/100</b></div>
-            ${road.blocked_reason ? `<div class="text-red-500 mt-1 font-semibold">${road.blocked_reason}</div>` : ''}
-          </div>
-        `);
+          `);
 
-        roads.addLayer(polyline);
+          roads.addLayer(glowLine);
+          roads.addLayer(dashedLine);
+        } else if (isRestricted) {
+          // Restricted Road: Yellow Dashed
+          const yellowLine = L.polyline(geom, {
+            color: '#f59e0b',
+            weight: 3.5,
+            opacity: 0.9,
+            dashArray: '4, 4',
+            lineCap: 'round',
+          });
+          roads.addLayer(yellowLine);
+        } else if (mode === 'routing-demo' || mode === 'routing-test' || mode === 'dashboard') {
+          // Open Road: Subtle Slate/Cyan
+          const openLine = L.polyline(geom, {
+            color: '#38bdf8',
+            weight: 2,
+            opacity: 0.4,
+            lineCap: 'round',
+          });
+          roads.addLayer(openLine);
+        }
       });
     }
 
-    // 3. Render Shelters
-    if (layersVisible.shelters) {
+    // 2. Render Selected Node & Outgoing Edges Highlight (Graph Inspector mode)
+    if (selectedNodeId && selectedNodeEdges) {
+      selectedNodeEdges.forEach((edge) => {
+        if (edge.geometry && edge.geometry.length >= 2) {
+          const edgePoly = L.polyline(edge.geometry, {
+            color: '#06b6d4',
+            weight: 5,
+            opacity: 0.9,
+            lineCap: 'round',
+          });
+          roads.addLayer(edgePoly);
+        }
+      });
+    }
+
+    // 3. Render Nearest Snap Indicator (Click ➔ Snapped Node)
+    if (nearestSnap) {
+      const snapClickIcon = L.divIcon({
+        html: `
+          <div style="background-color:#f59e0b; color:#000; font-weight:900; font-size:10px; width:22px; height:22px; border-radius:50%; border:2px solid #fff; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px #f59e0b;">
+            Tap
+          </div>
+        `,
+        className: '',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+
+      const clickMarker = L.marker([nearestSnap.clickLat, nearestSnap.clickLng], { icon: snapClickIcon });
+      const snapLine = L.polyline(
+        [
+          [nearestSnap.clickLat, nearestSnap.clickLng],
+          [nearestSnap.nodeLat, nearestSnap.nodeLng],
+        ],
+        {
+          color: '#f59e0b',
+          weight: 3,
+          dashArray: '4, 4',
+          opacity: 0.9,
+        }
+      );
+
+      snapping.addLayer(clickMarker);
+      snapping.addLayer(snapLine);
+    }
+
+    // 4. Render Active Route Polyline (Google Maps-Style Glowing Neon Blue)
+    if (routePolyline && routePolyline.length >= 2) {
+      const glowPoly = L.polyline(routePolyline, {
+        color: '#06b6d4',
+        weight: 9,
+        opacity: 0.4,
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+
+      const corePoly = L.polyline(routePolyline, {
+        color: '#38bdf8',
+        weight: 5,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+
+      route.addLayer(glowPoly);
+      route.addLayer(corePoly);
+    }
+
+    // 5. Render Alternative Safe Route (Emerald Green Dashed)
+    if (alternativePolyline && alternativePolyline.length >= 2) {
+      const altPoly = L.polyline(alternativePolyline, {
+        color: '#10b981',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '6, 6',
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+      alternativeRoute.addLayer(altPoly);
+    }
+
+    // 6. Render Start Point (Pin A) & Destination (Pin B)
+    if (startPoint) {
+      const startIcon = L.divIcon({
+        html: `
+          <div style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; font-weight:900; font-size:11px; width:28px; height:28px; border-radius:50%; border:2px solid #fff; display:flex; align-items:center; justify-content:center; box-shadow:0 0 16px rgba(16,185,129,0.8);">
+            A
+          </div>
+        `,
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      const sMarker = L.marker([startPoint.lat, startPoint.lng], { icon: startIcon });
+      sMarker.bindPopup(`<b>ORIGIN (A)</b><br/>${startPoint.label || 'Start Point'}`);
+      endpoints.addLayer(sMarker);
+    }
+
+    if (endPoint) {
+      const destIcon = L.divIcon({
+        html: `
+          <div style="background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; font-weight:900; font-size:11px; width:28px; height:28px; border-radius:50%; border:2px solid #fff; display:flex; align-items:center; justify-content:center; box-shadow:0 0 16px rgba(239,68,68,0.8);">
+            B
+          </div>
+        `,
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      const dMarker = L.marker([endPoint.lat, endPoint.lng], { icon: destIcon });
+      dMarker.bindPopup(`<b>DESTINATION (B)</b><br/>${endPoint.label || 'Destination Target'}`);
+      endpoints.addLayer(dMarker);
+    }
+
+    // 7. Citizen Distress Mode Markers
+    if (citizenSource) {
+      const sourceIcon = L.divIcon({
+        html: `
+          <div style="position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+            <div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:#ef4444; opacity:0.7; animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
+            <div style="position:relative; background-color:#dc2626; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; font-weight:bold; font-size:14px; box-shadow:0 2px 8px rgba(220,38,38,0.7);">
+              📍
+            </div>
+          </div>
+        `,
+        className: '',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+
+      const sourceMarker = L.marker([citizenSource.lat, citizenSource.lng], { icon: sourceIcon });
+      sourceMarker.bindPopup(`
+        <div class="p-1 text-slate-900 text-xs font-sans">
+          <div class="font-bold text-red-600">📍 YOUR SOS LOCATION</div>
+          <div class="font-semibold text-slate-800">${citizenSource.label}</div>
+        </div>
+      `);
+      sos.addLayer(sourceMarker);
+    }
+
+    if (citizenDestination) {
+      const destIcon = L.divIcon({
+        html: `
+          <div style="position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+            <div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:#10b981; opacity:0.5; animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+            <div style="position:relative; background-color:#059669; color:white; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; font-weight:bold; font-size:16px; box-shadow:0 2px 8px rgba(16,185,129,0.7);">
+              🛡️
+            </div>
+          </div>
+        `,
+        className: '',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+
+      const destMarker = L.marker([citizenDestination.lat, citizenDestination.lng], { icon: destIcon });
+      destMarker.bindPopup(`
+        <div class="p-1 text-slate-900 text-xs font-sans">
+          <div class="font-bold text-emerald-700">🛡️ ASSIGNED RELIEF SHELTER</div>
+          <div class="font-semibold text-slate-800">${citizenDestination.label}</div>
+          <div class="mt-1 font-bold text-emerald-800">${citizenDestination.availableBeds ?? 100} Beds Available</div>
+        </div>
+      `);
+      shelters.addLayer(destMarker);
+    }
+
+    // 8. Operational Entities (Shelters, Hospitals, Ambulances, Rescue Teams, Citizen SOS)
+    if (layersVisible.shelters && state.shelters) {
       state.shelters.forEach((shelter) => {
         const usagePct = Math.round((shelter.occupancy / Math.max(1, shelter.capacity)) * 100);
         const iconHtml = `
-          <div style="background-color:#9333ea; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(147,51,234,0.6); font-size:14px;">
+          <div style="background-color:#9333ea; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(147,51,234,0.6); font-size:13px;">
             🏠
           </div>
         `;
-        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
-
+        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
         const marker = L.marker([shelter.latitude, shelter.longitude], { icon });
         marker.bindPopup(`
           <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
@@ -532,7 +691,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <div class="mt-1">Capacity: <b>${shelter.occupancy} / ${shelter.capacity}</b> (${usagePct}%)</div>
             <div>Available Headroom: <b class="text-emerald-600">${shelter.available_capacity} beds</b></div>
             <div>Food: <b>${shelter.food_stock}</b> | Water: <b>${shelter.water_stock}</b></div>
-            <div>Power Backup: <b>${shelter.power_backup ? 'Active (Diesel Gen)' : 'Mains Only'}</b></div>
             <div class="text-[10px] text-slate-500 mt-1">${shelter.address}</div>
           </div>
         `);
@@ -540,23 +698,21 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       });
     }
 
-    // 4. Render Hospitals
-    if (layersVisible.hospitals) {
+    if (layersVisible.hospitals && state.hospitals) {
       state.hospitals.forEach((hosp) => {
         const iconHtml = `
-          <div style="background-color:#0284c7; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(2,132,199,0.6); font-size:14px;">
+          <div style="background-color:#0284c7; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(2,132,199,0.6); font-size:13px;">
             🏥
           </div>
         `;
-        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
-
+        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
         const marker = L.marker([hosp.latitude, hosp.longitude], { icon });
         marker.bindPopup(`
           <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
             <div class="font-bold text-sm text-blue-700">${hosp.hospital_name}</div>
             <div class="mt-1">General Beds: <b>${hosp.available_beds}</b></div>
-            <div>Critical ICU Beds: <b class="text-red-600">${hosp.icu_beds}</b></div>
-            <div>Ambulance Bays: <b>${hosp.ambulances_available} ready</b></div>
+            <div>ICU Beds: <b class="text-red-600">${hosp.icu_beds}</b></div>
+            <div>Ambulances: <b>${hosp.ambulances_available} ready</b></div>
             <div>Contact: <b>${hosp.contact_number}</b></div>
           </div>
         `);
@@ -564,96 +720,77 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       });
     }
 
-    // 5. Render Rescue Teams
-    if (layersVisible.rescue) {
+    if (layersVisible.rescue && state.rescue_teams) {
       state.rescue_teams.forEach((team) => {
         const isDeployed = team.status === 'deployed';
-        const bgColor = isDeployed ? '#ef4444' : '#2563eb';
+        const bgColor = isDeployed ? '#ef4444' : '#10b981';
         const iconHtml = `
-          <div style="background-color:${bgColor}; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(37,99,235,0.6); font-size:13px;">
+          <div style="background-color:${bgColor}; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(16,185,129,0.6); font-size:13px;">
             🚤
           </div>
         `;
-        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
-
+        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
         const marker = L.marker([team.latitude, team.longitude], { icon });
         marker.bindPopup(`
           <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
-            <div class="font-bold text-sm text-blue-800">${team.team_name}</div>
+            <div class="font-bold text-sm text-emerald-800">${team.team_name}</div>
             <div class="mt-1">Leader: <b>${team.leader}</b></div>
-            <div>Status: <b class="${isDeployed ? 'text-red-600' : 'text-blue-600'}">${team.status.toUpperCase()}</b></div>
+            <div>Status: <b class="uppercase">${team.status}</b></div>
             <div>Personnel: ${team.personnel} specialists</div>
-            <div class="text-[11px] text-slate-600 mt-1">Gear: ${team.equipment}</div>
           </div>
         `);
         rescue.addLayer(marker);
       });
     }
 
-    // 6. Render Ambulances
-    if (layersVisible.ambulances) {
+    if (layersVisible.ambulances && state.ambulances) {
       state.ambulances.forEach((amb) => {
         const isDeployed = amb.status === 'deployed';
-        const bgColor = isDeployed ? '#ea580c' : '#10b981';
+        const bgColor = isDeployed ? '#ea580c' : '#06b6d4';
         const iconHtml = `
-          <div style="background-color:${bgColor}; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(234,88,12,0.5); font-size:13px;">
+          <div style="background-color:${bgColor}; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; box-shadow:0 0 8px rgba(6,182,212,0.6); font-size:13px;">
             🚑
           </div>
         `;
-        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
-
+        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
         const marker = L.marker([amb.latitude, amb.longitude], { icon });
         marker.bindPopup(`
           <div class="p-1 text-slate-800 text-xs font-sans leading-tight">
-            <div class="font-bold text-sm text-orange-700">${amb.vehicle_code}</div>
-            <div class="mt-1">Driver: <b>${amb.driver_name}</b> (${amb.phone})</div>
-            <div>Status: <b class="${isDeployed ? 'text-orange-600' : 'text-emerald-600'}">${amb.status.toUpperCase()}</b></div>
-            <div>Fuel: <b>${amb.fuel}%</b> | Crew: ${amb.crew_size}</div>
+            <div class="font-bold text-sm text-cyan-700">${amb.vehicle_code}</div>
+            <div class="mt-1">Driver: <b>${amb.driver_name}</b></div>
+            <div>Status: <b class="uppercase">${amb.status}</b></div>
+            <div>Fuel: <b>${amb.fuel}%</b></div>
           </div>
         `);
         ambulances.addLayer(marker);
       });
     }
 
-    // 7. Render Citizen SOS Requests
-    if (layersVisible.sos) {
+    if (layersVisible.sos && state.citizen_requests) {
       state.citizen_requests.forEach((req) => {
         const isCompleted = req.status === 'completed';
-        const pulse = !isCompleted;
         const color = isCompleted
           ? '#10b981'
           : req.risk_level === 'Critical'
           ? '#ef4444'
-          : req.risk_level === 'High'
-          ? '#f97316'
-          : '#eab308';
+          : '#f97316';
 
         const iconHtml = `
-          <div style="position:relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
-            ${
-              pulse
-                ? `<div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:${color}; opacity:0.6; animation:ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>`
-                : ''
-            }
-            <div style="position:relative; background-color:${color}; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; font-weight:bold; font-size:11px; box-shadow:0 2px 6px rgba(0,0,0,0.4);">
+          <div style="position:relative; width:30px; height:30px; display:flex; align-items:center; justify-content:center;">
+            ${!isCompleted ? `<div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:${color}; opacity:0.6; animation:ping 1.5s infinite;"></div>` : ''}
+            <div style="position:relative; background-color:${color}; color:white; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; font-weight:bold; font-size:10px; box-shadow:0 2px 6px rgba(0,0,0,0.4);">
               SOS
             </div>
           </div>
         `;
 
-        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
-
+        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
         const marker = L.marker([req.latitude, req.longitude], { icon });
         marker.bindPopup(`
-          <div class="p-1.5 text-slate-800 text-xs font-sans leading-tight min-w-[200px]">
-            <div class="flex items-center justify-between border-b pb-1 mb-1">
-              <span class="font-bold text-sm text-red-600">${req.request_id}</span>
-              <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800">${req.risk_level}</span>
-            </div>
-            <div>Citizen: <b>${req.citizen_name}</b> (${req.citizen_phone})</div>
+          <div class="p-1.5 text-slate-800 text-xs font-sans leading-tight min-w-[190px]">
+            <div class="font-bold text-sm text-orange-600">${req.request_id}</div>
+            <div>Citizen: <b>${req.citizen_name}</b></div>
             <div>Trapped: <b>${req.people_count} people</b></div>
-            <div>Type: <b>${req.emergency_type}</b></div>
-            <div>Medical: <b>${req.medical_urgency}</b></div>
             <div class="mt-1 text-slate-600 italic">"${req.address_hint}"</div>
           </div>
         `);
@@ -666,145 +803,44 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       });
     }
 
-    // 8. Render Active Primary Route (#06B6D4 Cyan, 4px width, solid glowing line)
-    // NEVER draw routes using only two points
-    if (routePolyline && routePolyline.length >= 2) {
-      const glowPoly = L.polyline(routePolyline, {
-        color: '#06B6D4',
-        weight: 8,
-        opacity: 0.45,
-        lineCap: 'round',
-        lineJoin: 'round',
-      });
-
-      const corePoly = L.polyline(routePolyline, {
-        color: '#06B6D4',
-        weight: 4,
-        opacity: 0.95,
-        lineCap: 'round',
-        lineJoin: 'round',
-      });
-
-      const startMarker = L.circleMarker(routePolyline[0], {
-        radius: 6,
-        fillColor: '#06B6D4',
-        color: '#ffffff',
-        weight: 2,
-        fillOpacity: 1,
-      }).bindTooltip('Origin Dispatch Node', { permanent: false });
-
-      const endMarker = L.circleMarker(routePolyline[routePolyline.length - 1], {
-        radius: 7,
-        fillColor: '#ef4444',
-        color: '#ffffff',
-        weight: 2,
-        fillOpacity: 1,
-      }).bindTooltip('Destination Incident Target', { permanent: false });
-
-      route.addLayer(glowPoly);
-      route.addLayer(corePoly);
-      route.addLayer(startMarker);
-      route.addLayer(endMarker);
-    }
-
-    // 9. Render Safe Alternative Route (#10B981 Emerald, 3px width, dashed)
-    if (alternativePolyline && alternativePolyline.length >= 2) {
-      const altPoly = L.polyline(alternativePolyline, {
-        color: '#10B981',
-        weight: 3,
-        opacity: 0.85,
-        dashArray: '6, 6',
-        lineCap: 'round',
-        lineJoin: 'round',
-      });
-      alternativeRoute.addLayer(altPoly);
-    }
-
-    // 10. AI Predicted Flood Impact Zones
-    const activeImpactZones = state.latest_ai_flood_prediction?.impact_zones || state.latest_ai_flood_prediction?.red_impact_zones || [];
-    if (layersVisible.aiFloodZones && activeImpactZones.length > 0) {
-      activeImpactZones.forEach((zone) => {
-        if (!zone.polygon || zone.polygon.length < 3) return;
-        const isRed =
-          zone.impact_level === 'red' ||
-          zone.impact_level === 'Critical - Red Area' ||
-          zone.severity_category === 'red';
-        const color = isRed ? '#ef4444' : '#eab308';
-        const fillColor = isRed ? '#dc2626' : '#ca8a04';
-
+    // 9. Risk Zones (Flood Polygons)
+    if (layersVisible.riskZones && state.risk_zones) {
+      state.risk_zones.forEach((zone) => {
+        const color = zone.risk_level === 'Critical' ? '#ef4444' : '#f97316';
         const polygon = L.polygon(zone.polygon, {
           color,
-          weight: isRed ? 3.5 : 2.5,
-          fillColor,
-          fillOpacity: isRed ? 0.38 : 0.28,
-          dashArray: isRed ? '6, 4' : '4, 4',
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.25,
+          dashArray: '4, 4',
         });
-
-        polygon.bindTooltip(
-          `<div style="font-weight:bold; font-size:11px; color:${isRed ? '#dc2626' : '#b45309'}; padding: 2px;">
-            ${isRed ? '🚨 [RED AREA]' : '⚠️ [YELLOW AREA]'} ${zone.name || zone.zone_name || 'Impact Zone'} (+${zone.water_level_m || 2}m)
-          </div>`,
-          { sticky: true, opacity: 0.95 }
-        );
-
-        aiFloodZones.addLayer(polygon);
+        polygon.bindPopup(`<b>${zone.zone_name}</b><br/>Risk: ${zone.risk_level} (+${zone.water_level_m}m)`);
+        riskZones.addLayer(polygon);
       });
     }
-
-    // 11. Strategic Staging Points
-    const activeStagingPoints = state.latest_ai_flood_prediction?.quantum_prepositioning_points || state.latest_ai_flood_prediction?.strategic_prepositioning_points || [];
-    if (layersVisible.strategicStaging && activeStagingPoints.length > 0) {
-      activeStagingPoints.forEach((point) => {
-        const lat = point.latitude ?? point.lat;
-        const lng = point.longitude ?? point.lng;
-        if (lat == null || lng == null) return;
-
-        let badgeIcon = '🚤';
-        let badgeBg = '#2563eb';
-        let badgeBorder = '#60a5fa';
-
-        if (point.type === 'ambulance_als' || point.type === 'ambulance') {
-          badgeIcon = '🚑';
-          badgeBg = '#ea580c';
-          badgeBorder = '#fb923c';
-        } else if (point.type === 'relief_staging' || point.type === 'shelter') {
-          badgeIcon = '📦';
-          badgeBg = '#9333ea';
-          badgeBorder = '#c084fc';
-        }
-
-        const iconHtml = `
-          <div style="position:relative; width:38px; height:38px; display:flex; align-items:center; justify-content:center;">
-            <div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:${badgeBg}; opacity:0.4; animation:ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-            <div style="position:relative; background-color:${badgeBg}; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid ${badgeBorder}; font-size:14px; box-shadow:0 0 12px ${badgeBg}; font-weight:bold;">
-              ${badgeIcon}
-            </div>
-          </div>
-        `;
-
-        const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [38, 38], iconAnchor: [19, 19] });
-        const marker = L.marker([lat, lng], { icon });
-
-        marker.bindPopup(`
-          <div class="p-2 text-slate-900 text-xs font-sans min-w-[240px] leading-tight">
-            <div class="font-bold text-sm text-cyan-700">${point.title || point.label || 'Staging Point'}</div>
-            <div class="mt-1 text-slate-700">Sector: <b>${point.coverage_sector || 'General Basin'}</b></div>
-            <div class="text-slate-700">Elevation: <b>${point.dry_ground_elevation_m || point.elevation_m || 25}m AMSL</b></div>
-            <div class="mt-1.5 p-2 rounded bg-cyan-50 border border-cyan-200 text-cyan-950 text-[11px]">
-              ${point.staging_reason}
-            </div>
-          </div>
-        `);
-
-        strategicStaging.addLayer(marker);
-      });
-    }
-  }, [state, layersVisible, routePolyline, alternativePolyline, onSelectRequest, minimalCitizenMode, citizenSource, citizenDestination, roadGeometries]);
+  }, [
+    state,
+    layersVisible,
+    routePolyline,
+    alternativePolyline,
+    onSelectRequest,
+    mode,
+    citizenSource,
+    citizenDestination,
+    roadGeometries,
+    startPoint,
+    endPoint,
+    selectedNodeId,
+    selectedNodeEdges,
+    nearestSnap,
+    customRoads,
+    blockedRoadIds,
+  ]);
 
   // Handle focus coordinates
   useEffect(() => {
     if (!mapInstanceRef.current || !focusCoords) return;
-    mapInstanceRef.current.flyTo(focusCoords, 15, { duration: 1.2 });
+    mapInstanceRef.current.flyTo(focusCoords, 15, { duration: 1.0 });
   }, [focusCoords]);
 
   const toggleLayer = (layer: keyof typeof layersVisible) => {
@@ -812,93 +848,51 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   };
 
   return (
-    <div className={`relative isolate z-0 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 ${className}`}>
-      <div ref={mapContainerRef} style={{ height, width: '100%' }} />
+    <div
+      ref={rootContainerRef}
+      className={`relative isolate z-0 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 ${
+        isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen rounded-none border-0' : ''
+      } ${className}`}
+    >
+      <div
+        ref={mapContainerRef}
+        style={{ height: isFullscreen ? '100vh' : height, width: '100%' }}
+      />
 
-      {minimalCitizenMode ? (
-        <>
-          <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-1.5 pointer-events-auto">
-            <div className="bg-slate-900/95 backdrop-blur px-3 py-1.5 rounded-lg border border-emerald-500/60 text-white shadow-xl flex items-center gap-2 text-xs">
-              <span className="flex h-2.5 w-2.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </span>
-              <span className="font-bold text-emerald-400 uppercase tracking-wide">
-                Optimal Safe Evacuation Path
-              </span>
-            </div>
-            <div className="bg-slate-900/90 backdrop-blur px-2.5 py-1 rounded-md border border-slate-700 text-[11px] text-slate-300 shadow">
-              ✓ Verified dry road network avoiding floodwaters
-            </div>
-          </div>
+      {/* Top-Right Control Bar (Tile Selector, Fullscreen, Routing Modal, Layer Toggles) */}
+      <div className="absolute top-3 right-3 z-[1000] flex items-center gap-2 pointer-events-auto">
+        {/* Base Tile Layer Selector */}
+        <select
+          aria-label="Map Base Layer"
+          value={activeTileStyle}
+          onChange={(e) => setActiveTileStyle(e.target.value as MapTileStyle)}
+          className="bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg cursor-pointer outline-none"
+        >
+          <option value="tf-transport">⚡ Thunderforest Transport</option>
+          <option value="tf-outdoors">🏔️ Thunderforest Outdoors (Topo)</option>
+          <option value="tf-landscape">🌿 Thunderforest Landscape</option>
+          <option value="osm-standard">🗺️ OpenStreetMap Standard</option>
+          <option value="osm-hot">🚨 Humanitarian OSM</option>
+        </select>
 
-          {bypassWarning && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] max-w-md w-full px-2 pointer-events-auto hidden md:block">
-              <div className="bg-amber-950/95 backdrop-blur border border-amber-500/70 text-amber-200 px-3 py-1.5 rounded-xl shadow-2xl text-xs flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
-                <span className="truncate">{bypassWarning}</span>
-              </div>
-            </div>
-          )}
+        {/* Fullscreen Button */}
+        <button
+          onClick={toggleFullscreen}
+          className="flex items-center justify-center h-8 w-8 bg-slate-900/90 backdrop-blur hover:bg-slate-800 rounded-lg border border-slate-700 text-slate-200 shadow-lg transition-colors cursor-pointer"
+          title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enter Fullscreen'}
+        >
+          {isFullscreen ? <Minimize2 className="h-4 w-4 text-cyan-400" /> : <Maximize2 className="h-4 w-4 text-slate-300" />}
+        </button>
 
-          <div className="absolute top-3 right-3 z-[1000] flex items-center gap-2">
-            <select
-              aria-label="Map Base Layer"
-              value={activeTileStyle}
-              onChange={(e) => setActiveTileStyle(e.target.value as MapTileStyle)}
-              className="bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg cursor-pointer outline-none"
-            >
-              <option value="tf-transport">⚡ Street & Transit Map</option>
-              <option value="carto-voyager">🗺️ Voyager Street View</option>
-              <option value="tf-outdoors">🏔️ Topo Elevation Map</option>
-              <option value="carto-dark">🌑 Night Map</option>
-            </select>
-          </div>
-
-          <div className="absolute bottom-3 left-3 right-3 sm:right-auto z-[1000] flex flex-wrap items-center gap-2 bg-slate-950/95 backdrop-blur px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-200 shadow-2xl">
-            <div className="flex items-center gap-1.5">
-              <span className="text-red-400 font-bold">📍 Source:</span>
-              <span className="font-semibold text-white truncate max-w-[180px]">
-                {citizenSource?.label || 'Your Location'}
-              </span>
-            </div>
-            <span className="text-emerald-400 font-bold">➔</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-emerald-400 font-bold">🛡️ Destination:</span>
-              <span className="font-semibold text-white truncate max-w-[200px]">
-                {citizenDestination?.label || 'Relief Shelter'}
-              </span>
-            </div>
-            {citizenDestination?.availableBeds !== undefined && (
-              <span className="ml-auto text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                {citizenDestination.availableBeds} Beds Ready
-              </span>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="absolute top-3 right-3 z-[1000] flex items-center gap-2">
-            <select
-              aria-label="Map Base Layer"
-              value={activeTileStyle}
-              onChange={(e) => setActiveTileStyle(e.target.value as MapTileStyle)}
-              className="bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg transition-colors cursor-pointer outline-none"
-            >
-              <option value="tf-transport">⚡ Thunderforest Transport</option>
-              <option value="tf-outdoors">🏔️ Thunderforest Outdoors (Topo)</option>
-              <option value="tf-landscape">🌿 Thunderforest Landscape</option>
-              <option value="carto-dark">🌑 Tactical Dark Matrix</option>
-              <option value="carto-voyager">🗺️ Street Voyager</option>
-            </select>
-
+        {mode !== 'routing-demo' && mode !== 'routing-test' && (
+          <>
             <button
               onClick={() => setShowRoutingModal(true)}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-cyan-900/90 to-blue-900/90 hover:from-cyan-800 hover:to-blue-800 px-2.5 py-1.5 rounded-lg border border-cyan-500/40 text-xs font-semibold text-cyan-200 shadow-lg transition-colors cursor-pointer"
-              title="Inspect Dynamic Routing Architecture (A* + D* Lite)"
+              className="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-cyan-900/90 to-blue-900/90 hover:from-cyan-800 hover:to-blue-800 px-2.5 py-1.5 rounded-lg border border-cyan-500/40 text-xs font-semibold text-cyan-200 shadow-lg transition-colors cursor-pointer"
+              title="Inspect Dynamic Routing Architecture"
             >
               <Route className="h-3.5 w-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Routing Specs</span>
+              <span>Routing Specs</span>
             </button>
 
             <div className="relative">
@@ -907,25 +901,23 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                 className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 shadow-lg transition-colors cursor-pointer"
               >
                 <Layers className="h-3.5 w-3.5 text-blue-400" />
-                <span>GIS Layers</span>
+                <span>Layers</span>
               </button>
 
               {showLayerPanel && (
                 <div className="absolute right-0 mt-2 w-52 bg-slate-900/95 backdrop-blur p-2.5 rounded-xl border border-slate-700 shadow-2xl space-y-1.5 text-xs text-slate-200">
                   <div className="font-semibold text-slate-400 text-[11px] uppercase tracking-wider mb-1 px-1">
-                    Active Map Layers
+                    Active GIS Layers
                   </div>
 
                   {[
-                    { id: 'roads' as const, label: 'Road Status (OSRM)', color: 'bg-emerald-400' },
-                    { id: 'sos' as const, label: 'SOS Emergencies', color: 'bg-red-500' },
-                    { id: 'rescue' as const, label: 'NDRF Boat Squads', color: 'bg-blue-500' },
-                    { id: 'ambulances' as const, label: '108 Ambulances', color: 'bg-orange-500' },
+                    { id: 'roads' as const, label: 'Road Curvature (OSM)', color: 'bg-emerald-400' },
+                    { id: 'sos' as const, label: 'Citizen SOS', color: 'bg-orange-500' },
+                    { id: 'rescue' as const, label: 'NDRF Boat Squads', color: 'bg-emerald-500' },
+                    { id: 'ambulances' as const, label: '108 Ambulances', color: 'bg-cyan-500' },
                     { id: 'shelters' as const, label: 'Relief Shelters', color: 'bg-purple-500' },
-                    { id: 'hospitals' as const, label: 'Trauma Hospitals', color: 'bg-sky-500' },
-                    { id: 'riskZones' as const, label: 'Flood Risk Sectors', color: 'bg-amber-500' },
-                    { id: 'aiFloodZones' as const, label: 'AI Flood Surge (Red/Yellow)', color: 'bg-red-600' },
-                    { id: 'strategicStaging' as const, label: 'Strategic Staging Nodes', color: 'bg-cyan-400' },
+                    { id: 'hospitals' as const, label: 'Trauma Hospitals', color: 'bg-blue-500' },
+                    { id: 'riskZones' as const, label: 'Flood Risk Sectors', color: 'bg-red-500' },
                   ].map((layer) => (
                     <button
                       key={layer.id}
@@ -946,26 +938,23 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                 </div>
               )}
             </div>
-          </div>
+          </>
+        )}
+      </div>
 
-          {/* Bottom Floating Legend Bar (Phase 11: Tactical GIS Legend) */}
-          <div className="absolute bottom-3 left-3 z-[1000] hidden sm:flex items-center gap-3 bg-slate-950/90 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 shadow-xl">
-            <span className="font-semibold text-white">Tactical GIS:</span>
-            <span className="flex items-center gap-1 text-cyan-300 font-medium">
-              <span className="h-1.5 w-4 rounded bg-[#06B6D4]" /> Active Primary (A*)
-            </span>
-            <span className="flex items-center gap-1 text-emerald-300 font-medium">
-              <span className="h-1.5 w-4 rounded bg-[#10B981]" /> Safe Alternative
-            </span>
-            <span className="flex items-center gap-1 text-red-400 font-medium">
-              <span className="h-1.5 w-4 rounded bg-[#EF4444]" /> Blocked / Flooded
-            </span>
-            <span className="flex items-center gap-1 text-amber-300 font-medium">
-              <span className="h-1.5 w-4 rounded bg-[#F59E0B]" /> Restricted Corridor
-            </span>
-          </div>
-        </>
-      )}
+      {/* Floating Legend / Status Badge */}
+      <div className="absolute bottom-3 left-3 z-[1000] flex flex-wrap items-center gap-3 bg-slate-950/90 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 shadow-xl pointer-events-auto">
+        <span className="font-semibold text-white">Vijayawada GIS:</span>
+        <span className="flex items-center gap-1 text-cyan-300 font-medium">
+          <span className="h-1.5 w-4 rounded bg-[#38bdf8]" /> Primary Route (A*)
+        </span>
+        <span className="flex items-center gap-1 text-emerald-300 font-medium">
+          <span className="h-1.5 w-4 rounded bg-[#10b981]" /> Safe Alternative
+        </span>
+        <span className="flex items-center gap-1 text-red-400 font-medium">
+          <span className="h-1.5 w-4 rounded border border-red-500 bg-red-500/40 border-dashed" /> Blocked / Flooded
+        </span>
+      </div>
 
       {/* Dynamic Routing Architecture Modal */}
       {showRoutingModal && (

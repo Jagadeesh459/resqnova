@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useResQNova } from '../context/ResQNovaContext';
-import { buildGraph, findShortestPath, Graph, RouteResult, findNearestNodeWithDistance } from '../lib/routing';
+import { buildGraph, findShortestPath, Graph, RouteResult } from '../lib/routing';
+import { TacticalMap } from '../components/TacticalMap';
 import {
   Navigation,
   Route,
@@ -79,16 +78,7 @@ export const RoutingDemoPage: React.FC = () => {
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [blockedRoadIds, setBlockedRoadIds] = useState<Set<string>>(new Set());
 
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const roadNetworkLayerRef = useRef<L.LayerGroup | null>(null);
-  const routePolylineLayerRef = useRef<L.Polyline | null>(null);
-  const routeGlowLayerRef = useRef<L.Polyline | null>(null);
-  const startMarkerRef = useRef<L.Marker | null>(null);
-  const endMarkerRef = useRef<L.Marker | null>(null);
-  const exploredLayerRef = useRef<L.LayerGroup | null>(null);
-
-  // 1. Load Graph Engine
+  // 1. Load Graph Engine from Supabase
   const initGraph = async () => {
     setLoadingGraph(true);
     try {
@@ -140,195 +130,18 @@ export const RoutingDemoPage: React.FC = () => {
     }
   }, [graph, startPoint, endPoint]);
 
-  // 3. Initialize Leaflet Tactical Map
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-    if (mapInstanceRef.current) return;
-
-    const map = L.map(mapContainerRef.current, {
-      center: [16.5090, 80.6400],
-      zoom: 13,
-      zoomControl: true,
-    });
-
-    // Dark Map Tiles
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      maxZoom: 19,
-    }).addTo(map);
-
-    roadNetworkLayerRef.current = L.layerGroup().addTo(map);
-    exploredLayerRef.current = L.layerGroup().addTo(map);
-
-    // Interactive Click to Set Start or Destination
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      const lat = Number(e.latlng.lat.toFixed(5));
-      const lng = Number(e.latlng.lng.toFixed(5));
-
-      setClickMode((current) => {
-        if (current === 'start') {
-          setStartPoint({ lat, lng, label: `Custom Origin [${lat}, ${lng}]` });
-          return 'end';
-        } else {
-          setEndPoint({ lat, lng, label: `Custom Destination [${lat}, ${lng}]` });
-          return 'start';
-        }
-      });
-    });
-
-    mapInstanceRef.current = map;
-
-    return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-    };
-  }, []);
-
-  // 4. Render Background Road Network
-  useEffect(() => {
-    if (!mapInstanceRef.current || !graph || !roadNetworkLayerRef.current) return;
-    const layer = roadNetworkLayerRef.current;
-    layer.clearLayers();
-
-    let count = 0;
-    for (const [_, edgeList] of graph.adjacency.entries()) {
-      for (const edge of edgeList) {
-        if (count > 800) break;
-        count++;
-
-        const isBlocked = blockedRoadIds.has(edge.roadId);
-        const polyline = L.polyline(edge.geometry, {
-          color: isBlocked ? '#ef4444' : '#1e293b',
-          weight: isBlocked ? 3 : 1.5,
-          opacity: isBlocked ? 0.8 : 0.4,
-          dashArray: isBlocked ? '4, 4' : undefined,
-        });
-        layer.addLayer(polyline);
-      }
+  // Handle Map Click (Setting Start / Destination)
+  const handleMapClick = (lat: number, lng: number) => {
+    if (clickMode === 'start') {
+      setStartPoint({ lat, lng, label: `Custom Origin [${lat}, ${lng}]` });
+      setClickMode('end');
+    } else {
+      setEndPoint({ lat, lng, label: `Custom Destination [${lat}, ${lng}]` });
+      setClickMode('start');
     }
-  }, [graph, blockedRoadIds]);
+  };
 
-  // 5. Render A* Calculated Route with Smooth Animation & Road-Following Curves
-  useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-
-    // Clean up previous route layers
-    if (routePolylineLayerRef.current) {
-      map.removeLayer(routePolylineLayerRef.current);
-      routePolylineLayerRef.current = null;
-    }
-    if (routeGlowLayerRef.current) {
-      map.removeLayer(routeGlowLayerRef.current);
-      routeGlowLayerRef.current = null;
-    }
-    if (startMarkerRef.current) {
-      map.removeLayer(startMarkerRef.current);
-      startMarkerRef.current = null;
-    }
-    if (endMarkerRef.current) {
-      map.removeLayer(endMarkerRef.current);
-      endMarkerRef.current = null;
-    }
-
-    if (!routeResult || routeResult.geometry.length < 2) return;
-
-    // Outer Neon Glow Polyline
-    const glowPolyline = L.polyline(routeResult.geometry, {
-      color: '#06b6d4',
-      weight: 9,
-      opacity: 0.35,
-      lineCap: 'round',
-      lineJoin: 'round',
-    }).addTo(map);
-    routeGlowLayerRef.current = glowPolyline;
-
-    // Core Solid Navigation Polyline (Google Maps Blue)
-    const mainPolyline = L.polyline(routeResult.geometry, {
-      color: '#38bdf8',
-      weight: 5,
-      opacity: 0.95,
-      lineCap: 'round',
-      lineJoin: 'round',
-    }).addTo(map);
-    routePolylineLayerRef.current = mainPolyline;
-
-    // Start Marker (Green Pin A)
-    const startIcon = L.divIcon({
-      className: 'start-pin',
-      html: `
-        <div style="
-          background: linear-gradient(135deg, #10b981, #059669);
-          color: #ffffff;
-          font-weight: 900;
-          font-size: 11px;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          border: 2px solid #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 0 16px rgba(16, 185, 129, 0.8);
-        ">
-          A
-        </div>
-      `,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    });
-
-    const sMarker = L.marker([startPoint.lat, startPoint.lng], { icon: startIcon }).addTo(map);
-    sMarker.bindPopup(`
-      <div style="font-family: sans-serif; font-size: 12px; color: #0f172a;">
-        <div style="font-weight: bold; color: #059669;">ORIGIN (A)</div>
-        <div>${startPoint.label}</div>
-        <div><strong>Snapped Node:</strong> ${routeResult.startNode?.id || 'Nearest'}</div>
-      </div>
-    `);
-    startMarkerRef.current = sMarker;
-
-    // Destination Marker (Red Pin B)
-    const destIcon = L.divIcon({
-      className: 'dest-pin',
-      html: `
-        <div style="
-          background: linear-gradient(135deg, #ef4444, #dc2626);
-          color: #ffffff;
-          font-weight: 900;
-          font-size: 11px;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          border: 2px solid #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 0 16px rgba(239, 68, 68, 0.8);
-        ">
-          B
-        </div>
-      `,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    });
-
-    const dMarker = L.marker([endPoint.lat, endPoint.lng], { icon: destIcon }).addTo(map);
-    dMarker.bindPopup(`
-      <div style="font-family: sans-serif; font-size: 12px; color: #0f172a;">
-        <div style="font-weight: bold; color: #dc2626;">DESTINATION (B)</div>
-        <div>${endPoint.label}</div>
-        <div><strong>Snapped Node:</strong> ${routeResult.targetNode?.id || 'Nearest'}</div>
-      </div>
-    `);
-    endMarkerRef.current = dMarker;
-
-    // Smoothly zoom/fit bounds to the calculated route
-    const bounds = L.latLngBounds(routeResult.geometry);
-    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-  }, [routeResult, startPoint, endPoint]);
-
-  // Handle selecting a preset route
+  // Select a preset route
   const selectPreset = (preset: PresetRoute) => {
     setStartPoint(preset.start);
     setEndPoint(preset.end);
@@ -358,17 +171,17 @@ export const RoutingDemoPage: React.FC = () => {
                 PHASE 3 A* NAVIGATION ENGINE
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                O(E log V) PRIORITY HEAP
+                STANDARDIZED TACTICAL MAP
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                GEOJSON CURVES PRESERVED
+                THUNDERFOREST BASEMAP
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
               Google Maps-Style A* Shortest Path Engine
             </h1>
             <p className="text-xs text-slate-300 mt-0.5 max-w-3xl">
-              Calculates optimal turn-by-turn routes across OpenStreetMap geometry for Vijayawada (NTR District). Click anywhere on the map to set Start (A) and Destination (B) or select a quick scenario.
+              Calculates optimal turn-by-turn routes across OpenStreetMap geometry for Vijayawada (NTR District). Click anywhere on the map to set Start (A) and Destination (B) or select a quick benchmark scenario.
             </p>
           </div>
         </div>
@@ -469,7 +282,7 @@ export const RoutingDemoPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick-Select Scenarios (Step 8) */}
+      {/* Quick-Select Benchmark Scenarios */}
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5">
         <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
           <Sparkles className="h-4 w-4 text-cyan-400" />
@@ -501,7 +314,7 @@ export const RoutingDemoPage: React.FC = () => {
 
       {/* Interactive Map & Route Guidance */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 8 Cols: Leaflet Tactical Map */}
+        {/* Left 8 Cols: Unified Tactical Map */}
         <div className="lg:col-span-8 space-y-3">
           <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -519,10 +332,15 @@ export const RoutingDemoPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Leaflet Container */}
-            <div
-              ref={mapContainerRef}
-              className="w-full h-[540px] rounded-xl border border-slate-800 overflow-hidden relative shadow-inner z-0"
+            {/* Standardized Tactical Map Component */}
+            <TacticalMap
+              height="540px"
+              mode="routing-demo"
+              startPoint={startPoint}
+              endPoint={endPoint}
+              routePolyline={routeResult?.geometry}
+              onMapClick={handleMapClick}
+              blockedRoadIds={blockedRoadIds}
             />
           </div>
         </div>
@@ -596,7 +414,7 @@ export const RoutingDemoPage: React.FC = () => {
               )}
             </div>
 
-            {/* Dynamic Obstacle Simulator (Step 11 & D* Lite Prep) */}
+            {/* Dynamic Obstacle Simulator */}
             <div className="pt-2 border-t border-slate-800 space-y-2">
               <span className="font-bold text-slate-300 flex items-center gap-1.5 text-xs">
                 <Flame className="h-4 w-4 text-orange-400" />
@@ -635,4 +453,3 @@ export const RoutingDemoPage: React.FC = () => {
     </div>
   );
 };
-
