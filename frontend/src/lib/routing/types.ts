@@ -40,6 +40,24 @@ export interface RouteStep {
   geometry: [number, number][];
 }
 
+export type ManeuverType =
+  | 'depart'
+  | 'straight'
+  | 'turn-left'
+  | 'turn-right'
+  | 'slight-left'
+  | 'slight-right'
+  | 'u-turn'
+  | 'arrive';
+
+export interface TurnInstruction {
+  instruction: string;
+  maneuver: ManeuverType;
+  roadName: string;
+  distanceMeters: number;
+  travelTimeSeconds: number;
+}
+
 export interface RouteResult {
   pathNodes: string[];
   roadIds: string[];
@@ -51,4 +69,6 @@ export interface RouteResult {
   startNode: GraphNode;
   targetNode: GraphNode;
   stepSegments: RouteStep[];
+  instructions: TurnInstruction[];
+  startingRoadName: string;
 }

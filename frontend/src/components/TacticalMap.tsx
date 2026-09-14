@@ -20,7 +20,7 @@ import {
   Radio,
 } from 'lucide-react';
 import { DynamicRoutingModal } from './DynamicRoutingModal';
-import { geoJsonToLeafletCoordinates } from '../lib/routing/utils';
+import { geoJsonToLeafletCoordinates, calculateBearing, haversineDistance } from '../lib/routing/utils';
 
 export type TacticalMapMode =
   | 'dashboard'
@@ -66,6 +66,12 @@ export interface TacticalMapProps {
   // Custom Road Overrides (e.g. from graph inspector)
   customRoads?: any[];
   blockedRoadIds?: Set<string>;
+
+  // Route Simulation / Animated Navigation props
+  isSimulatingRoute?: boolean;
+  simulationSpeed?: number;
+  vehicleType?: 'citizen' | 'ambulance' | 'rescue' | 'default';
+  onSimulationProgress?: (progress: number) => void;
 }
 
 // In-memory cache for OSRM / GeoJSON road geometry
@@ -139,6 +145,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   nearestSnap,
   customRoads,
   blockedRoadIds,
+  isSimulatingRoute = false,
+  simulationSpeed = 1,
+  vehicleType = 'default',
+  onSimulationProgress,
 }) => {
   const { state } = useResQNova();
   const rootContainerRef = useRef<HTMLDivElement>(null);
@@ -173,7 +183,9 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     dynamicCorridors: L.LayerGroup;
     endpoints: L.LayerGroup;
     snapping: L.LayerGroup;
+    vehicles: L.LayerGroup;
   } | null>(null);
+
 
   // Initialize Layer Visibility according to portal mode
   const [layersVisible, setLayersVisible] = useState(() => {
@@ -385,6 +397,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       dynamicCorridors: L.layerGroup().addTo(map),
       endpoints: L.layerGroup().addTo(map),
       snapping: L.layerGroup().addTo(map),
+      vehicles: L.layerGroup().addTo(map),
     };
 
     // Attach click listener
@@ -837,6 +850,148 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     blockedRoadIds,
   ]);
 
+  // Route Simulation / Animated Vehicle Movement
+  useEffect(() => {
+    if (!layerGroupsRef.current) return;
+    const { vehicles } = layerGroupsRef.current;
+    vehicles.clearLayers();
+
+    if (!isSimulatingRoute || !routePolyline || routePolyline.length < 2) {
+      return;
+    }
+
+    // Precalculate cumulative distances along polyline
+    const cumDists: number[] = [0];
+    for (let i = 0; i < routePolyline.length - 1; i++) {
+      const segDist = haversineDistance(
+        routePolyline[i][0],
+        routePolyline[i][1],
+        routePolyline[i + 1][0],
+        routePolyline[i + 1][1]
+      );
+      cumDists.push(cumDists[cumDists.length - 1] + Math.max(0.1, segDist));
+    }
+    const totalDist = cumDists[cumDists.length - 1];
+    if (totalDist <= 0) return;
+
+    // Determine vehicle badge design based on type
+    const getVehicleHtml = (heading: number) => {
+      let icon = '🚙';
+      let color = '#0ea5e9';
+      let shadowColor = '#38bdf8';
+      let pulseColor = 'rgba(14, 165, 233, 0.5)';
+
+      if (vehicleType === 'ambulance') {
+        icon = '🚑';
+        color = '#dc2626';
+        shadowColor = '#ef4444';
+        pulseColor = 'rgba(239, 68, 68, 0.6)';
+      } else if (vehicleType === 'rescue') {
+        icon = '🚤';
+        color = '#059669';
+        shadowColor = '#10b981';
+        pulseColor = 'rgba(16, 185, 129, 0.6)';
+      } else if (vehicleType === 'citizen') {
+        icon = '🚗';
+        color = '#2563eb';
+        shadowColor = '#60a5fa';
+        pulseColor = 'rgba(37, 99, 235, 0.6)';
+      }
+
+      return `
+        <div style="position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center;">
+          <div style="position:absolute; width:100%; height:100%; border-radius:50%; background-color:${pulseColor}; animation:ping 1.2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+          <div style="transform: rotate(${heading}deg); transition: transform 0.08s linear; display:flex; align-items:center; justify-content:center; z-index:10;">
+            <div style="background:${color}; color:#fff; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #ffffff; box-shadow:0 0 16px ${shadowColor}; font-size:16px;">
+              ${icon}
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const initialHeading = calculateBearing(
+      routePolyline[0][0],
+      routePolyline[0][1],
+      routePolyline[1][0],
+      routePolyline[1][1]
+    );
+
+    const vehicleMarker = L.marker([routePolyline[0][0], routePolyline[0][1]], {
+      icon: L.divIcon({
+        html: getVehicleHtml(initialHeading),
+        className: '',
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+      }),
+      zIndexOffset: 1000,
+    });
+
+    vehicles.addLayer(vehicleMarker);
+
+    // Duration scales with route length (min 6s, max 25s at 1x speed)
+    const baseDuration = Math.max(6000, Math.min(25000, totalDist * 4));
+    const durationMs = baseDuration / Math.max(0.1, simulationSpeed);
+    const startTime = performance.now();
+    let animId: number;
+    let lastProgressReported = -1;
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = (elapsed % durationMs) / durationMs;
+
+      // Distance traveled so far along polyline
+      const currentDist = progress * totalDist;
+
+      // Find segment
+      let segIdx = 0;
+      for (let i = 0; i < cumDists.length - 1; i++) {
+        if (currentDist >= cumDists[i] && currentDist <= cumDists[i + 1]) {
+          segIdx = i;
+          break;
+        }
+      }
+
+      const p1 = routePolyline[segIdx];
+      const p2 = routePolyline[Math.min(segIdx + 1, routePolyline.length - 1)];
+      const segStartDist = cumDists[segIdx];
+      const segLength = cumDists[segIdx + 1] - segStartDist;
+      const alpha = segLength > 0 ? (currentDist - segStartDist) / segLength : 0;
+
+      const currentLat = p1[0] + alpha * (p2[0] - p1[0]);
+      const currentLng = p1[1] + alpha * (p2[1] - p1[1]);
+      const heading = calculateBearing(p1[0], p1[1], p2[0], p2[1]);
+
+      vehicleMarker.setLatLng([currentLat, currentLng]);
+      vehicleMarker.setIcon(
+        L.divIcon({
+          html: getVehicleHtml(heading),
+          className: '',
+          iconSize: [48, 48],
+          iconAnchor: [24, 24],
+        })
+      );
+
+      // Report progress periodically
+      const progressPercent = Math.round(progress * 100);
+      if (progressPercent !== lastProgressReported) {
+        lastProgressReported = progressPercent;
+        if (onSimulationProgress) {
+          onSimulationProgress(progress);
+        }
+      }
+
+      animId = requestAnimationFrame(animate);
+    };
+
+    animId = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      vehicles.clearLayers();
+    };
+  }, [isSimulatingRoute, simulationSpeed, vehicleType, routePolyline, onSimulationProgress]);
+
   // Handle focus coordinates
   useEffect(() => {
     if (!mapInstanceRef.current || !focusCoords) return;
@@ -846,6 +1001,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const toggleLayer = (layer: keyof typeof layersVisible) => {
     setLayersVisible((prev) => ({ ...prev, [layer]: !prev[layer] }));
   };
+
 
   return (
     <div

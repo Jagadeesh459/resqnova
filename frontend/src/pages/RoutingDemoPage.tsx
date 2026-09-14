@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useResQNova } from '../context/ResQNovaContext';
-import { buildGraph, findShortestPath, Graph, RouteResult } from '../lib/routing';
+import { buildGraph, findShortestPath, Graph, RouteResult, TurnInstruction, ManeuverType } from '../lib/routing';
 import { TacticalMap } from '../components/TacticalMap';
 import {
   Navigation,
@@ -22,6 +22,16 @@ import {
   Lock,
   ChevronRight,
   ShieldCheck,
+  Play,
+  Pause,
+  RotateCcw,
+  CornerUpLeft,
+  CornerUpRight,
+  ArrowUp,
+  ArrowUpLeft,
+  ArrowUpRight,
+  Gauge,
+  Car,
 } from 'lucide-react';
 
 interface PresetRoute {
@@ -77,6 +87,12 @@ export const RoutingDemoPage: React.FC = () => {
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [blockedRoadIds, setBlockedRoadIds] = useState<Set<string>>(new Set());
+
+  // Vehicle Movement Simulation States
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simSpeed, setSimSpeed] = useState<number>(1);
+  const [vehicleType, setVehicleType] = useState<'default' | 'citizen' | 'ambulance' | 'rescue'>('ambulance');
+  const [simProgress, setSimProgress] = useState<number>(0);
 
   // 1. Load Graph Engine from Supabase
   const initGraph = async () => {
@@ -145,6 +161,8 @@ export const RoutingDemoPage: React.FC = () => {
   const selectPreset = (preset: PresetRoute) => {
     setStartPoint(preset.start);
     setEndPoint(preset.end);
+    setIsSimulating(false);
+    setSimProgress(0);
   };
 
   // Toggle blocking a road on the current route
@@ -155,6 +173,28 @@ export const RoutingDemoPage: React.FC = () => {
       else next.add(roadId);
       return next;
     });
+  };
+
+  // Helper for Maneuver Icons
+  const renderManeuverIcon = (maneuver: ManeuverType) => {
+    switch (maneuver) {
+      case 'turn-left':
+        return <CornerUpLeft className="h-4 w-4 text-cyan-400" />;
+      case 'turn-right':
+        return <CornerUpRight className="h-4 w-4 text-cyan-400" />;
+      case 'slight-left':
+        return <ArrowUpLeft className="h-4 w-4 text-cyan-300" />;
+      case 'slight-right':
+        return <ArrowUpRight className="h-4 w-4 text-cyan-300" />;
+      case 'u-turn':
+        return <RotateCcw className="h-4 w-4 text-amber-400" />;
+      case 'arrive':
+        return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
+      case 'depart':
+      case 'straight':
+      default:
+        return <ArrowUp className="h-4 w-4 text-blue-400" />;
+    }
   };
 
   return (
@@ -168,20 +208,20 @@ export const RoutingDemoPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400">
-                PHASE 3 A* NAVIGATION ENGINE
+                PHASE 3.5 GOOGLE MAPS NAVIGATION UX
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                STANDARDIZED TACTICAL MAP
+                TURN-BY-TURN GUIDANCE
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                THUNDERFOREST BASEMAP
+                60FPS LIVE ANIMATION
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
-              Google Maps-Style A* Shortest Path Engine
+              Google Maps-Style A* Shortest Path & Live Navigation
             </h1>
             <p className="text-xs text-slate-300 mt-0.5 max-w-3xl">
-              Calculates optimal turn-by-turn routes across OpenStreetMap geometry for Vijayawada (NTR District). Click anywhere on the map to set Start (A) and Destination (B) or select a quick benchmark scenario.
+              Calculates optimal turn-by-turn routes across OpenStreetMap geometry for Vijayawada (NTR District). Click anywhere on the map to set Start (A) and Destination (B), or simulate vehicle movement in real time.
             </p>
           </div>
         </div>
@@ -269,16 +309,18 @@ export const RoutingDemoPage: React.FC = () => {
 
         <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between col-span-2 sm:col-span-2 lg:col-span-1">
           <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span>Curve Waypoints</span>
-            <Layers className="h-4 w-4 text-blue-400" />
+            <span>Starting Corridor</span>
+            <Compass className="h-4 w-4 text-blue-400" />
           </div>
           <div className="mt-2">
-            <span className="text-2xl sm:text-3xl font-black text-blue-400">
-              {routeResult ? routeResult.geometry.length : '--'}
+            <span className="text-base sm:text-lg font-black text-blue-300 truncate block">
+              {routeResult?.startingRoadName || '--'}
             </span>
-            <span className="text-xs text-slate-400 ml-1.5">points</span>
           </div>
-          <div className="mt-1 text-[11px] text-blue-300/80">Zero air-lines</div>
+          <div className="mt-1 text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+            <ShieldCheck className="h-3 w-3" />
+            <span>Optimal Traversable</span>
+          </div>
         </div>
       </div>
 
@@ -314,7 +356,7 @@ export const RoutingDemoPage: React.FC = () => {
 
       {/* Interactive Map & Route Guidance */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 8 Cols: Unified Tactical Map */}
+        {/* Left 8 Cols: Unified Tactical Map & Simulation Controls */}
         <div className="lg:col-span-8 space-y-3">
           <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -334,14 +376,87 @@ export const RoutingDemoPage: React.FC = () => {
 
             {/* Standardized Tactical Map Component */}
             <TacticalMap
-              height="540px"
+              height="500px"
               mode="routing-demo"
               startPoint={startPoint}
               endPoint={endPoint}
               routePolyline={routeResult?.geometry}
               onMapClick={handleMapClick}
               blockedRoadIds={blockedRoadIds}
+              isSimulatingRoute={isSimulating}
+              simulationSpeed={simSpeed}
+              vehicleType={vehicleType}
+              onSimulationProgress={(progress) => setSimProgress(progress)}
             />
+
+            {/* Live Navigation Simulation Toolbar */}
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Play / Pause Button */}
+                <button
+                  onClick={() => setIsSimulating(!isSimulating)}
+                  disabled={!routeResult || routeResult.geometry.length < 2}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
+                    isSimulating
+                      ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-950/40'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40 disabled:opacity-50 disabled:cursor-not-allowed'
+                  }`}
+                >
+                  {isSimulating ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  <span>{isSimulating ? 'Pause Movement' : 'Start Navigation Simulation'}</span>
+                </button>
+
+                {/* Speed Multipliers */}
+                <div className="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+                  <span className="text-[10px] text-slate-400 font-bold px-1.5 uppercase">Speed:</span>
+                  {[1, 2, 5].map((speed) => (
+                    <button
+                      key={speed}
+                      onClick={() => setSimSpeed(speed)}
+                      className={`px-2 py-0.5 rounded font-mono font-bold transition-colors cursor-pointer ${
+                        simSpeed === speed ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
+                </div>
+
+                {/* Vehicle Type Selector */}
+                <div className="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+                  <span className="text-[10px] text-slate-400 font-bold px-1.5 uppercase">Unit:</span>
+                  {[
+                    { type: 'ambulance' as const, label: '🚑 Ambulance' },
+                    { type: 'rescue' as const, label: '🚤 NDRF Boat' },
+                    { type: 'citizen' as const, label: '🚗 Citizen' },
+                  ].map((v) => (
+                    <button
+                      key={v.type}
+                      onClick={() => setVehicleType(v.type)}
+                      className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer text-[11px] ${
+                        vehicleType === v.type ? 'bg-slate-700 text-cyan-300' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Progress Bar Indicator */}
+              <div className="w-full sm:w-48 flex flex-col gap-1">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span>Trajectory Progress:</span>
+                  <span className="text-cyan-400 font-bold">{Math.round(simProgress * 100)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-75"
+                    style={{ width: `${Math.round(simProgress * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -350,8 +465,9 @@ export const RoutingDemoPage: React.FC = () => {
           {/* Active Navigation Panel */}
           <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
             <div className="border-b border-slate-800 pb-3">
-              <span className="text-[11px] text-cyan-400 font-mono font-bold uppercase tracking-wider">
-                ACTIVE NAVIGATION PATH
+              <span className="text-[11px] text-cyan-400 font-mono font-bold uppercase tracking-wider flex items-center justify-between">
+                <span>ACTIVE NAVIGATION PATH</span>
+                <span className="text-slate-400 text-[10px]">{routeResult?.distanceMeters || 0}m total</span>
               </span>
               <div className="mt-2 space-y-2">
                 <div className="flex items-start gap-2 text-xs">
@@ -380,33 +496,43 @@ export const RoutingDemoPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Turn-by-Turn Segment Sequence */}
+            {/* Turn-by-Turn Maneuver Guidance (Google Maps Style) */}
             <div className="space-y-2">
-              <span className="font-bold text-slate-300 flex items-center gap-1.5 text-xs">
-                <GitCommit className="h-4 w-4 text-cyan-400" />
-                Street Progression ({routeResult?.stepSegments.length || 0} segments):
+              <span className="font-bold text-slate-300 flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5">
+                  <Navigation className="h-4 w-4 text-cyan-400" />
+                  Turn-by-Turn Maneuvers:
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {routeResult?.instructions?.length || 0} steps
+                </span>
               </span>
 
-              {!routeResult || routeResult.stepSegments.length === 0 ? (
+              {!routeResult || !routeResult.instructions || routeResult.instructions.length === 0 ? (
                 <div className="text-xs text-slate-400 italic p-3 bg-slate-950 rounded-xl border border-slate-800">
                   No traversable road sequence available.
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                  {routeResult.stepSegments.map((step, idx) => (
+                <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                  {routeResult.instructions.map((inst, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs flex items-center justify-between hover:border-slate-700 transition-colors"
+                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs flex items-start gap-2.5 hover:border-slate-700 transition-colors"
                     >
-                      <div className="truncate mr-2">
-                        <span className="font-bold text-white block truncate">{step.roadName}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {step.from} ➔ {step.to} ({step.geometry.length} pts)
-                        </span>
+                      <div className="h-7 w-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                        {renderManeuverIcon(inst.maneuver)}
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="font-bold text-cyan-300 font-mono">{step.distanceMeters}m</span>
-                        <div className="text-[10px] text-slate-400 font-mono">{step.travelTimeSeconds}s</div>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-slate-100 block leading-tight">
+                          {inst.instruction}
+                        </span>
+                        {inst.distanceMeters > 0 && (
+                          <div className="text-[10px] text-slate-400 font-mono mt-1 flex items-center gap-2">
+                            <span className="text-cyan-400 font-bold">{inst.distanceMeters}m</span>
+                            <span>•</span>
+                            <span>{inst.travelTimeSeconds}s</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -424,7 +550,7 @@ export const RoutingDemoPage: React.FC = () => {
                 Block a street segment on this route to verify that A* immediately re-routes around the obstruction.
               </p>
 
-              <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
                 {routeResult?.stepSegments.slice(0, 5).map((step) => {
                   const isBlocked = blockedRoadIds.has(step.roadId);
                   return (
@@ -453,3 +579,4 @@ export const RoutingDemoPage: React.FC = () => {
     </div>
   );
 };
+
